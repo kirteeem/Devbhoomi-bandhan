@@ -26,11 +26,11 @@ export const Home = () => (
     <StatsBar />
     <WhyUs />
   
-    <KundaliShowcase />
+ 
     <HowItWorks />
     <Testimonials />
    
     <Faq />
-    <CTABanner />
+
   </>
 );
