@@ -2,14 +2,13 @@ import {
   Hero,
   StatsBar,
   WhyUs,
-  KundaliShowcase,
+  
   
   HowItWorks,
   Testimonials,
  
   Faq,
-  CTABanner,
-  
+ 
 } from "../components/home";
 
 /**
