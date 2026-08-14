@@ -1,0 +1,35 @@
+{
+  "nav": { "home": "होम", "matches": "मैच ब्राउज़ करें", "kundali": "निःशुल्क कुंडली", "stories": "सफलता की कहानियाँ", "contact": "संपर्क", "login": "लॉग इन", "signup": "प्रोफाइल बनाएं" },
+  "hero": {
+    "blessing": "🌺 ॥ जय माता नैणा देवी ॥ 🌺",
+    "subBlessing": "माँ नैणा देवी के आशीर्वाद से",
+    "title": "देवभूमि बंधन",
+    "subtitle": "हिमाचल के संस्कारी परिवारों के लिए विश्वसनीय वैवाहिक मंच",
+    "createProfile": "प्रोफाइल बनाएं",
+    "browseMatches": "मैच ब्राउज़ करें"
+  },
+  "why": {
+    "eyebrow": "क्यों चुनें हमें",
+    "title": "क्यों चुनें देवभूमि बंधन",
+    "himachalFocused": "हिमाचल केंद्रित",
+    "himachalFocusedDesc": "शिमला से चंबा तक हर परिवार की अपनी भाषा में समझ।",
+    "freeKundali": "निःशुल्क कुंडली मिलान",
+    "freeKundaliDesc": "पंडित जी द्वारा पूरी तरह मुफ़्त कुंडली मिलान सेवा।",
+    "familyValues": "पारिवारिक मूल्य",
+    "familyValuesDesc": "हर प्रोफाइल परिवार की सहमति और संस्कारों पर आधारित।",
+    "privacy": "विश्वसनीय और निजी",
+    "privacyDesc": "सत्यापित प्रोफाइल और पूरी तरह सुरक्षित जानकारी।"
+  },
+  "dashboard": {
+    "goodMorning": "सुप्रभात", "goodAfternoon": "नमस्कार", "goodEvening": "शुभ संध्या",
+    "newMatches": "नए मैच", "interests": "रुचियाँ", "messages": "संदेश",
+    "kundaliStatus": "कुंडली स्थिति", "profileCompletion": "प्रोफाइल पूर्णता", "suggested": "सुझाई गई प्रोफाइल"
+  },
+  "auth": {
+    "loginTitle": "वापसी पर स्वागत है", "signupTitle": "अपनी प्रोफाइल बनाएं",
+    "fullName": "पूरा नाम", "phone": "फ़ोन नंबर", "email": "ईमेल (वैकल्पिक)",
+    "password": "पासवर्ड", "gender": "लिंग", "male": "पुरुष", "female": "महिला",
+    "createdFor": "प्रोफाइल किसके लिए बना रहे हैं", "self": "स्वयं", "son": "बेटे के लिए", "daughter": "बेटी के लिए", "sibling": "भाई-बहन", "relative": "रिश्तेदार",
+    "loginBtn": "लॉग इन करें", "signupBtn": "प्रोफाइल बनाएं", "orOtp": "OTP से लॉग इन करें", "orGoogle": "Google से जारी रखें"
+  }
+}

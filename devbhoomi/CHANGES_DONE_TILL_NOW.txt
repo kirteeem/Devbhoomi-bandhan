@@ -1,0 +1,197 @@
+DEVBHOOMI BANDHAN - CHANGES DONE TILL NOW
+==========================================
+(Temporary note file. Delete once read / merged into your repo.)
+
+
+1. FIX: "NOT FOUND" ON PAGE REFRESH (login page + whole site)
+--------------------------------------------------------------
+Cause: React Router SPA — a hard refresh on a route like /login asks the
+static host for a literal file at that path, which doesn't exist.
+
+- render.yaml already had the correct fix (rewrite /* -> /index.html for
+  the frontend static site).
+- Fixed a real bug in render.yaml: backend rootDir was "backend/backend"
+  (wrong — repo only has one "backend" folder). Changed to "backend".
+- IMPORTANT: this rewrite rule only applies if the services were deployed
+  as a Render Blueprint. If you set them up manually in the dashboard,
+  you also need to add the same rule by hand: frontend service ->
+  Settings -> Redirects/Rewrites -> Source "/*", Destination
+  "/index.html", Type "Rewrite".
+
+
+2. CUSTOM DOMAIN: devbhoomi-bandhan.com
+-----------------------------------------
+- render.yaml: added `domains: [devbhoomi-bandhan.com]` to the frontend
+  static site.
+- backend/.env (local copy) + Render dashboard env var: CLIENT_URL now
+  includes the custom domain alongside the Render URL (drives CORS,
+  Socket.IO, and email links — all read from this one variable).
+- Still needed from your side (not code): DNS records at your registrar
+  (ANAME/ALIAS or A record for root domain, CNAME for www), and adding
+  the domain to Google OAuth's Authorized JavaScript origins + Razorpay's
+  allowed origins if those dashboards have domain allow-lists.
+
+
+3. PROFILE ID NOW SHOWN ON OTHER USERS' PROFILES
+---------------------------------------------------
+When viewing someone else's profile, their Devbhoomi ID (profileCode,
+e.g. DBB100042) now shows under their name — needed for referencing a
+specific match with family/matchmaker/support. Shown regardless of
+unlock status since it's just an ID, not contact info.
+File: frontend/src/pages/ProfilePreview.tsx
+
+
+4. BACKEND PERFORMANCE FIXES
+-------------------------------
+- Browse Matches: sorting by "Recently active"/"Premium"/"Verified"/
+  "Best match %" used to fetch every matching profile's FULL document
+  (photos, about-me, family, everything) on every request just to sort
+  it, then threw away all but one page. Now only pulls the few fields
+  needed to sort, and only hydrates full docs for the page being shown.
+- Fixed N+1 query on the Visitors page: was up to 30 separate DB calls
+  in a loop, now 1 batched call.
+- Added missing database indexes (User: gender+status, status+
+  lastActiveAt; Profile: visibility+createdAt, visibility+updatedAt) —
+  these queries were doing full collection scans before.
+- Added .lean() to read-only queries across matches, dashboard, and
+  profile endpoints (skips unnecessary Mongoose overhead).
+- Added gzip compression (JSON responses ~70-80% smaller over the wire).
+- Tuned MongoDB connection: pooled connections (max 10), fails fast
+  (5s) instead of hanging if Atlas is unreachable.
+- NOTE (not a code fix): if you're on Render's free plan, the backend
+  spins down after ~15 min idle and takes 30-60s to wake up — this is
+  the most likely cause of "login feels slow." Upgrade the instance
+  type, or ping /api/health every ~10 min from a free uptime monitor
+  (e.g. UptimeRobot) to keep it warm. Also confirm your MongoDB Atlas
+  cluster is in the same region as your Render service.
+
+
+5. FREE VS PREMIUM — CLEANUP
+-------------------------------
+a) Removed a dead/unused component: RecentVisitorsWidget.tsx said
+   "Visitor tracking is coming soon" even though visitor tracking was
+   already fully built and working (/visitors page). It wasn't imported
+   anywhere, so it was just stale, confusing leftover code. Deleted.
+
+b) Fixed the Pricing page comparison table — it didn't match what the
+   backend actually gives free users:
+   - "Browse Matches": now correctly shown as Unlimited for both tiers
+     (was mislabeled "Browse Limited Matches").
+   - "Unlock Full Profile Details": free tier actually gets 5 free
+     unlocks (was shown as free: false/not available).
+   - Split out a separate, correctly-labeled row for "Unlock Contact
+     Info (Phone/Email)" — free: not available, premium: 10 users
+     (this is the actual premium-only perk that was previously
+     conflated with full-profile-detail unlocking).
+   - "Kundali Match Making": free tier gets 1 free match (was shown as
+     free: false).
+   File: frontend/src/pages/Pricing.tsx
+
+c) Fixed confusing developer-jargon wording in Settings -> Change
+   Password section (e.g. "Credential Rotations", "Current active
+   token string", "Apply Key Rotation", "Sever Node Session") — replaced
+   with plain, normal wording ("Change Password", "Current password",
+   "Update Password", "Log Out"). No functional change, just copy a
+   non-technical user can actually understand.
+   File: frontend/src/pages/Settings.tsx
+
+
+6. FREE USERS: NO MORE BLURRED PHOTOS
+-----------------------------------------
+Previously, free members had photos blurred/hidden past certain limits
+in a few places even though browsing itself was already unlimited:
+- Dashboard's "Suggested Matches" widget blurred photos for suggestions
+  past position 5. Removed — no blurring there anymore.
+- The main Profile page (viewing any specific member) didn't even
+  render the photo gallery at all unless that profile had been
+  "unlocked" (spending one of the 5 free unlocks). Now photos always
+  show for everyone, free or premium — the backend also no longer
+  strips `photos` from the API response in the restricted view.
+- Browse Matches / Suggested Matches grid: was already unlimited/
+  unblurred (FREE_BROWSE_LIMIT was already set to unlimited there).
+
+What STILL stays gated behind unlocks/premium (unchanged, by design):
+- Full profile details — about me, family, education/career, lifestyle,
+  horoscope, partner preferences (needs one of the 5 free unlocks, or
+  premium).
+- Contact info — phone/email/address (premium-only, 10 users per plan).
+- "Who viewed my profile" list (premium-only).
+Files: backend/src/controllers/dashboardController.js,
+backend/src/controllers/profileController.js,
+frontend/src/pages/ProfilePreview.tsx
+
+
+7. SIGNUP: PHONE NUMBER OTP VERIFICATION (Message Central)
+--------------------------------------------------------------
+New requirement on the Signup page: a phone number must now be verified
+with an OTP before an account can be created — same pattern as the
+existing email verification step, side by side with it. Reduces fake/junk
+accounts signing up with numbers they don't actually control.
+
+How it works:
+- New backend endpoints (mirroring the email ones):
+  POST /api/auth/signup/phone-otp/request  { phone }
+  POST /api/auth/signup/phone-otp/verify   { phone, code }
+  -> returns a short-lived phoneVerificationToken (20 min), which the
+  frontend now sends along with emailVerificationToken when submitting
+  POST /api/auth/signup. Signup is rejected if either token is missing,
+  expired, or doesn't match the phone/email actually submitted.
+- SMS is sent via Message Central's "Verify Now" API using the
+  MESSAGE_CENTRAL_CUSTOMER_ID / MESSAGE_CENTRAL_EMAIL /
+  MESSAGE_CENTRAL_PASSWORD env vars (new file:
+  backend/src/utils/messageCentral.js). Message Central generates and
+  owns the OTP itself (unlike the existing Brevo SMS path, which sends a
+  code we generate) — we just trigger the send and later ask Message
+  Central "was this code right?" via their validate API.
+  - Auth token from Message Central is cached in memory (~6 days) instead
+    of being re-fetched on every OTP send.
+  - This is now the DEFAULT SMS OTP provider whenever
+    MESSAGE_CENTRAL_CUSTOMER_ID is set — this also upgrades the existing
+    OTP-login and "verify phone in Settings" flows automatically, not
+    just signup, since they share the same underlying otp.js. If the
+    Message Central vars are ever unset, everything falls back to
+    exactly the previous Brevo SMS behaviour automatically.
+- Frontend: Signup page's phone number field now has the same "Send OTP
+  -> enter code -> Verified" flow as the email field already had. The
+  Create Account button is blocked until both email and phone show
+  Verified.
+- .env / .env.example / render.yaml updated with the three
+  MESSAGE_CENTRAL_* variables.
+
+>>> ACTION NEEDED FROM YOU: set MESSAGE_CENTRAL_CUSTOMER_ID,
+MESSAGE_CENTRAL_EMAIL, and MESSAGE_CENTRAL_PASSWORD in the Render
+dashboard's backend service (Environment tab) — they're marked sync:false
+in render.yaml so Render won't pick them up from this repo automatically,
+same as your other secrets (Mongo URI, JWT secrets, etc.).
+
+>>> SECURITY NOTE: your real Mongo URI (with password), SMTP password,
+Cloudinary secret, and Message Central password were pasted directly into
+this chat. Treat all of those as compromised and rotate them (change the
+password / regenerate the key from each service's dashboard) once you're
+done testing — chat messages aren't the right place for live production
+secrets to live long-term, even in your own conversation.
+
+
+FILES CHANGED (this + all previous sessions)
+-----------------------------------------------
+- render.yaml
+- backend/.env
+- backend/.env.example
+- backend/server.js
+- backend/package.json
+- backend/src/config/db.js
+- backend/src/models/User.js
+- backend/src/models/Profile.js
+- backend/src/models/Otp.js
+- backend/src/controllers/matchController.js
+- backend/src/controllers/dashboardController.js
+- backend/src/controllers/profileController.js
+- backend/src/controllers/authController.js
+- backend/src/routes/authRoutes.js
+- backend/src/utils/otp.js
+- backend/src/utils/messageCentral.js (new)
+- frontend/src/pages/ProfilePreview.tsx
+- frontend/src/pages/Pricing.tsx
+- frontend/src/pages/Settings.tsx
+- frontend/src/pages/Signup.tsx
+- frontend/src/components/profile/sidebar/RecentVisitorsWidget.tsx (deleted)

@@ -1,0 +1,63 @@
+services:
+  # ── Backend: Node/Express API ────────────────────────────────────────────
+  - type: web
+    name: devbhoomi-backend
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Set this to your frontend's URL(s). Comma-separate multiple origins
+      # if needed. Include the custom domain so the browser's Origin header
+      # (sent from https://devbhoomi-bandhan.com) passes the CORS check:
+      # e.g. https://devbhoomi-bandhan.com,https://devbhoomi-frontend.onrender.com
+      - key: CLIENT_URL
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      # Phone OTP verification on Signup (utils/messageCentral.js) — get
+      # these from console.messagecentral.com. Set the values in the Render
+      # dashboard, same as the other sync:false vars here.
+      - key: MESSAGE_CENTRAL_CUSTOMER_ID
+        sync: false
+      - key: MESSAGE_CENTRAL_EMAIL
+        sync: false
+      - key: MESSAGE_CENTRAL_PASSWORD
+        sync: false
+      # Add any other secrets your .env.example lists (Cloudinary, Razorpay, SMTP, etc.)
+
+  # ── Frontend: Vite static build ──────────────────────────────────────────
+  - type: web
+    name: devbhoomi-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    # Custom domain. Render automatically adds/redirects the "www." version
+    # too, so listing the root domain here is enough. This only *declares*
+    # the association — you still have to point DNS at Render (see below)
+    # and the domain must show as "Verified" on the service's Settings ->
+    # Custom Domains page before it actually serves traffic.
+    domains:
+      - devbhoomi-bandhan.com
+    envVars:
+      # Set this to your backend's Render URL, e.g. https://devbhoomi-backend.onrender.com
+      # NOTE: origin only, no trailing slash, no "/api" suffix — the code appends that itself.
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      # Fixes "Not Found" on refresh/deep-link: React Router (BrowserRouter)
+      # handles routes like /dashboard client-side, but a hard refresh asks
+      # the static host for that exact path, which doesn't exist as a file.
+      # This rewrite sends every request to index.html so the SPA can boot
+      # and let the router take over.
+      - type: rewrite
+        source: /*
+        destination: /index.html

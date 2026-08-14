@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html { scroll-behavior: smooth; }
+/* Safety net: several pages layer large decorative blur/glow shapes with
+   absolute negative offsets (e.g. -top-40 -left-40 w-[600px]) for the
+   ambient background effect. Most are already wrapped in an
+   overflow-hidden parent, but this guarantees no page can ever gain a
+   horizontal scrollbar / side-scroll on narrow (mobile) viewports even if
+   one is missed. */
+html, body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+::selection { background: #E8CD7A; color: #5C1629; }
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-maroon to-maroon-dark
+      px-6 py-3 font-bold text-cream shadow-lg shadow-maroon/25 transition-transform duration-200 hover:-translate-y-0.5 active:scale-95;
+  }
+  .btn-gold {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-gold to-[#b9902a]
+      px-6 py-3 font-bold text-[#2b1c05] shadow-lg shadow-gold/25 transition-transform duration-200 hover:-translate-y-0.5 active:scale-95;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-line px-6 py-3 font-bold
+      transition-colors duration-200 hover:border-maroon hover:text-maroon;
+  }
+  .card {
+    @apply rounded-card border border-line bg-cream transition-all duration-300;
+  }
+  .input {
+    @apply w-full rounded-xl border border-line bg-white px-4 py-3 text-sm outline-none transition-colors focus:border-maroon;
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "nav": { "home": "Home", "matches": "Browse Matches", "kundali": "Free Kundali", "stories": "Success Stories", "contact": "Contact", "login": "Log In", "signup": "Create Profile" },
+  "hero": {
+    "blessing": "॥ विवाह संस्कार, देवभूमि के साथ ॥",
+    "subBlessing": "By the blessings of Maa Naina Devi",
+    "title": "Devbhoomi Bandhan",
+    "subtitle": "A trusted matrimonial platform for Himachal's sanskari families",
+    "createProfile": "Create Profile",
+    "browseMatches": "Browse Matches"
+  },
+  "why": {
+    "eyebrow": "Why choose us",
+    "title": "Why Devbhoomi Bandhan",
+    "himachalFocused": "Himachal Focused",
+    "himachalFocusedDesc": "Families from Shimla to Chamba, understood on their own terms.",
+    "freeKundali": "Free Kundali Matching",
+    "freeKundaliDesc": "Priest-guided horoscope matching at no cost, ever.",
+    "familyValues": "Family Values",
+    "familyValuesDesc": "Every profile is rooted in family consent and tradition.",
+    "privacy": "Trusted & Private",
+    "privacyDesc": "Verified profiles and fully protected personal information."
+  },
+  "dashboard": {
+    "goodMorning": "Good Morning", "goodAfternoon": "Good Afternoon", "goodEvening": "Good Evening",
+    "newMatches": "New Matches", "interests": "Interests", "messages": "Messages",
+    "kundaliStatus": "Kundali Status", "profileCompletion": "Profile Completion", "suggested": "Suggested Profiles"
+  },
+  "auth": {
+    "loginTitle": "Welcome back", "signupTitle": "Create your profile",
+    "fullName": "Full name", "phone": "Phone number", "email": "Email (optional)",
+    "password": "Password", "gender": "Gender", "male": "Male", "female": "Female",
+    "createdFor": "Creating profile for", "self": "Myself", "son": "Son", "daughter": "Daughter", "sibling": "Sibling", "relative": "Relative",
+    "loginBtn": "Log In", "signupBtn": "Create Profile", "orOtp": "Log in with OTP instead", "orGoogle": "Continue with Google"
+  }
+}
