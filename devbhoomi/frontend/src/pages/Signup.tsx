@@ -594,7 +594,11 @@ export const Signup = () => {
                           </div>
                         </div>
                         <span className="text-xs text-[#1A1A1A]/60 leading-normal font-light">
-                          I honor the network code, confirming all profile components represent verified genealogical elements accurately.
+                          I agree to Devbhoomi Bandhan's{" "}
+                          <Link to="/terms-and-policies" className="text-[#7B1E3D] underline hover:no-underline" onClick={(e) => e.stopPropagation()}>
+                            Terms & Conditions and Privacy Policy
+                          </Link>
+                          , and confirm that all details I've provided are accurate.
                         </span>
                       </label>
                     )}
@@ -682,8 +686,8 @@ export const Signup = () => {
         <footer className="mt-20 pt-8 border-t border-[#ECE8E2] flex flex-col sm:flex-row justify-between items-center gap-4 text-[10px] text-[#1A1A1A]/30 font-semibold tracking-widest uppercase">
           <span>© 2026 DEVBHOOMI BANDHAN. DEEPLY ROOTED IN TRADITION.</span>
           <div className="flex gap-6">
-            <a href="#privacy" className="hover:text-[#7B1E3D]">Privacy Architecture</a>
-            <a href="#terms" className="hover:text-[#7B1E3D]">System Mandates</a>
+            <Link to="/terms-and-policies" className="hover:text-[#7B1E3D]">Privacy Policy</Link>
+            <Link to="/terms-and-policies" className="hover:text-[#7B1E3D]">Terms & Conditions</Link>
           </div>
         </footer>
 

@@ -1,0 +1,19 @@
+User-agent: *
+Allow: /
+# Private/authenticated areas — no value being indexed, and some are
+# per-user pages that shouldn't show up in public search results anyway.
+Disallow: /dashboard
+Disallow: /matches
+Disallow: /profile/
+Disallow: /visitors
+Disallow: /shortlist
+Disallow: /settings
+Disallow: /notifications
+Disallow: /checkout/
+Disallow: /payment/
+Disallow: /payments/
+Disallow: /admin
+Disallow: /verify-email
+Disallow: /reset-password
+
+Sitemap: https://devbhoomi-bandhan.com/sitemap.xml

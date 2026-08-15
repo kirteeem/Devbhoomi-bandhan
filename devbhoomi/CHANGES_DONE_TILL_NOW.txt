@@ -172,6 +172,47 @@ done testing — chat messages aren't the right place for live production
 secrets to live long-term, even in your own conversation.
 
 
+8. SEO BASICS + FOOTER TERMS/PRIVACY LINKS FIXED
+--------------------------------------------------------------
+Site had no SEO setup at all before this — Google couldn't properly index
+it and links shared on WhatsApp/Facebook showed no preview.
+
+- frontend/public/robots.txt (new) — allows indexing of public pages,
+  blocks private/authenticated ones (dashboard, matches, profile, settings,
+  payments, admin, etc.) from being crawled.
+- frontend/public/sitemap.xml (new) — lists all genuinely public pages
+  (home, about, pricing, success stories, FAQ, contact, signup, login,
+  terms, refund policy) for Google to discover and crawl.
+- frontend/index.html — added:
+  - A real meta description (Hindi + English) — this is what shows up
+    under your link in Google search results.
+  - Open Graph + Twitter Card tags — this is what makes a proper preview
+    card show up when the link is shared on WhatsApp/Facebook/Twitter,
+    instead of a bare link.
+  - A canonical URL pointing at the custom domain.
+  - Favicon links (was completely missing before).
+- frontend/public/favicon.ico, favicon-32x32.png, favicon-16x16.png,
+  apple-touch-icon.png, og-image.jpg (new) — generated from the existing
+  logo (frontend/src/assets/logo.jpeg). og-image.jpg is the 1200x630
+  image used for social share previews.
+- Fixed the Signup page footer's "Privacy"/"Terms" links — they were dead
+  anchors (#privacy, #terms) with confusing labels ("Privacy
+  Architecture", "System Mandates") that went nowhere, even though a real
+  working page already existed at /terms-and-policies. Now they link
+  there with plain labels ("Privacy Policy", "Terms & Conditions").
+- Also fixed the actual "I agree" checkbox right above the Create Account
+  button (the real legal consent, more important than the footer links)
+  — it had confusing jargon ("I honor the network code, confirming all
+  profile components represent verified genealogical elements
+  accurately") and didn't link to Terms/Privacy at all. Now it plainly
+  says "I agree to Devbhoomi Bandhan's Terms & Conditions and Privacy
+  Policy" with a working link.
+
+Note: robots.txt/sitemap.xml reference https://devbhoomi-bandhan.com — once
+DNS is pointed there (see section 2), these work as-is with no further
+changes needed.
+
+
 FILES CHANGED (this + all previous sessions)
 -----------------------------------------------
 - render.yaml
@@ -194,4 +235,9 @@ FILES CHANGED (this + all previous sessions)
 - frontend/src/pages/Pricing.tsx
 - frontend/src/pages/Settings.tsx
 - frontend/src/pages/Signup.tsx
+- frontend/index.html
+- frontend/public/robots.txt (new)
+- frontend/public/sitemap.xml (new)
+- frontend/public/favicon.ico, favicon-32x32.png, favicon-16x16.png,
+  apple-touch-icon.png, og-image.jpg (new)
 - frontend/src/components/profile/sidebar/RecentVisitorsWidget.tsx (deleted)
