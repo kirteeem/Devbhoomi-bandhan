@@ -15,11 +15,34 @@ const hashCode = (code) => crypto.createHash("sha256").update(code).digest("hex"
 // a BREVO_SMS_SENDER name). Note: for Indian numbers, Brevo (like every SMS
 // gateway) requires the message template + sender ID to be registered with
 // a DLT provider before delivery will actually succeed — having a Brevo
-// account alone isn't enough. Falls back to logging in dev/when unconfigured
-// so nothing throws if it isn't set up yet; callers should treat this as
-// best-effort and offer the email channel as a fallback.
+// account alone isn't enough.
+//
+// FIXED: this used to swallow every failure (missing key, bad response,
+// network error) and just log it, while generateAndSendOtp() below still
+// told the caller "OTP sent successfully" regardless. That meant a member
+// could see a success message on screen while literally nothing was sent —
+// which is exactly the "didn't receive OTP" symptom with no visible error.
+// Now: an *unconfigured* provider is still allowed to silently log-only in
+// non-production (so local dev keeps working without real credentials),
+// but a real send attempt that fails (bad key, Brevo rejects it, network
+// error) always throws, and — critically — so does a completely
+// unconfigured provider in production, since "OTP sent" must never be a
+// lie in prod. Callers must catch this and are expected to fall back to
+// the email channel (see generateAndSendOtp).
 const sendSms = async (phone, code) => {
   if (!process.env.BREVO_API_KEY) {
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        "[OTP][SMS] BREVO_API_KEY is not set in this environment (and Message Central isn't configured " +
+          "either) — there is no way to actually deliver this SMS. Set MESSAGE_CENTRAL_CUSTOMER_ID/" +
+          "MESSAGE_CENTRAL_EMAIL/MESSAGE_CENTRAL_PASSWORD or BREVO_API_KEY in Render's Environment tab."
+      );
+      const err = new Error(
+        "SMS delivery isn't configured on this server right now. Please request the code by email instead."
+      );
+      err.statusCode = 502;
+      throw err;
+    }
     console.log(`[OTP][SMS] (BREVO_API_KEY not configured — logging only) Sending ${code} to ${phone}`);
     return { delivered: false, logged: true };
   }
@@ -43,13 +66,26 @@ const sendSms = async (phone, code) => {
     if (!response.ok) {
       const body = await response.text().catch(() => "");
       console.error(`[OTP][SMS] Brevo SMS request failed (${response.status}): ${body}`);
-      return { delivered: false, logged: false };
+      // A 401/403 here almost always means BREVO_API_KEY is wrong/revoked;
+      // a 400 with a DLT/template complaint means the sender isn't
+      // registered yet for Indian numbers — either way this is not
+      // something retrying the same request will fix.
+      const err = new Error(
+        "We couldn't send your verification code by SMS right now. Please try again in a moment, or request the code by email instead."
+      );
+      err.statusCode = 502;
+      throw err;
     }
 
     return { delivered: true, logged: false };
   } catch (err) {
+    if (err.statusCode) throw err; // already a friendly error constructed above
     console.error("[OTP][SMS] Brevo SMS request errored:", err.message);
-    return { delivered: false, logged: false };
+    const friendlyErr = new Error(
+      "We couldn't send your verification code by SMS right now. Please try again in a moment, or request the code by email instead."
+    );
+    friendlyErr.statusCode = 502;
+    throw friendlyErr;
   }
 };
 
@@ -155,7 +191,16 @@ export const generateAndSendOtp = async (
       throw friendlyErr;
     }
   } else {
-    await sendSms(identifier, code);
+    try {
+      await sendSms(identifier, code);
+    } catch (err) {
+      // Same reasoning as the email branch above: the code was saved to
+      // Mongo already, but it was never actually delivered anywhere the
+      // member can read it, so delete it rather than making them wait out
+      // the resend cooldown for a code that's useless to them.
+      await otpRecord.deleteOne();
+      throw err;
+    }
   }
   return true;
 };
