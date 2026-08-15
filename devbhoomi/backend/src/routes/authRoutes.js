@@ -16,7 +16,6 @@ import {
   getMe,
   changePassword,
   updatePreferences,
-  deactivateAccount,
   forgotPassword,
   resetPassword,
   requestEmailVerification,
@@ -58,7 +57,7 @@ router.get("/me", protect, getMe);
 router.patch("/change-password", protect, validate(changePasswordSchema), changePassword);
 router.patch("/preferences", protect, validate(updatePreferencesSchema), updatePreferences);
 router.post("/verification-request", protect, validate(verificationRequestSchema), requestVerification);
-router.delete("/me", protect, deactivateAccount);
+
 
 router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
