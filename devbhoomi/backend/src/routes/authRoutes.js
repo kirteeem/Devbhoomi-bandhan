@@ -20,7 +20,6 @@ import {
   resetPassword,
   requestEmailVerification,
   confirmEmailVerification,
-  requestVerification,
   signupSchema,
   loginSchema,
   changePasswordSchema,
@@ -29,7 +28,6 @@ import {
   resetPasswordSchema,
   requestEmailVerificationSchema,
   confirmEmailVerificationSchema,
-  verificationRequestSchema,
   signupEmailOtpRequestSchema,
   signupEmailOtpVerifySchema,
   signupPhoneOtpRequestSchema,
@@ -56,8 +54,6 @@ router.post("/logout", protect, logout);
 router.get("/me", protect, getMe);
 router.patch("/change-password", protect, validate(changePasswordSchema), changePassword);
 router.patch("/preferences", protect, validate(updatePreferencesSchema), updatePreferences);
-router.post("/verification-request", protect, validate(verificationRequestSchema), requestVerification);
-
 
 router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
