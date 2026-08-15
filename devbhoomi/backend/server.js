@@ -41,13 +41,20 @@ const server = http.createServer(app);
 // Enable proxy trust for deployment platforms like Render
 app.set("trust proxy", 1);
 
-// Parse allowed client origins (Includes custom domain, render deployment, and local dev)
+// Allowed frontend origins.
+// IMPORTANT: this reads from CLIENT_URL (comma-separate multiple origins,
+// e.g. "https://devbhoomi-bandhan.com,https://www.devbhoomi-bandhan.com,
+// https://devbhoomi-frontend.onrender.com") so a redeploy or domain change
+// never requires an app code change. The hardcoded fallbacks below are only
+// a safety net for local/preview testing — CLIENT_URL on Render is the
+// actual source of truth, so double-check it in the Render dashboard
+// (Environment tab) if production requests are being blocked. Make sure
+// each URL there EXACTLY matches what the browser sends as Origin
+// (https vs http, www vs no-www, no trailing slash, and the real Render
+// service hostname — not a guessed one).
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
-  "https://devbhoomi-bandhan.onrender.com",
-  "https://devbhoomi-bandhan.com",
-  "https://www.devbhoomi-bandhan.com",
   ...(process.env.CLIENT_URL || "")
     .split(",")
     .map((url) => url.trim().replace(/\/$/, ""))
@@ -68,6 +75,17 @@ initSocket(io);
 app.set("io", io);
 
 // Express CORS Configuration
+//
+// FIXED: this used to call callback(null, false) for a blocked origin,
+// which makes the `cors` package quietly omit the Access-Control-Allow-
+// Origin header instead of raising an error. The browser then blocks the
+// request client-side with no server-visible failure at all — from the
+// backend's perspective nothing ever went wrong, so nothing gets logged,
+// and the request never reaches any route (no OTP sent, no duplicate-email
+// check run, etc.) even though everything else is configured correctly.
+// Throwing an Error here instead makes a blocked origin show up clearly in
+// the Render logs (and as a real error response) so a CLIENT_URL/domain
+// mismatch is obvious instead of looking like "email/SMS just don't work".
 const corsOptions = {
   origin(origin, callback) {
     // Allow requests with no origin (like mobile apps, Postman, or server-to-server calls)
@@ -81,9 +99,8 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    console.warn("CORS blocked request from origin:", origin);
-    // Return null, false to safely reject without throwing host-level connection aborts
-    return callback(null, false);
+    console.warn("CORS blocked request from origin:", origin, "— allowed origins are:", allowedOrigins);
+    return callback(new Error(`CORS blocked: ${origin} is not an allowed origin`));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

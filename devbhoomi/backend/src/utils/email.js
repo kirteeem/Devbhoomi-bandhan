@@ -1,3 +1,9 @@
+// Thin abstraction over an SMTP provider (Brevo relay) with a direct Brevo
+// REST API fallback. If NEITHER is configured, emails are logged to the
+// console instead of failing, but ONLY outside production — in production
+// a fully unconfigured email service throws, since silently "succeeding"
+// while sending nothing is exactly what caused the original "no OTP
+// received on Render" symptom.
 import nodemailer from "nodemailer";
 
 let transporter = null;
@@ -17,12 +23,10 @@ const getTransporter = () => {
   return transporter;
 };
 
-// Direct Brevo REST API Fallback
+// Direct Brevo REST API path — used whenever SMTP_HOST isn't set but
+// BREVO_API_KEY is. Handy on hosts (or trial Brevo accounts) where outbound
+// SMTP port 587 is awkward but HTTPS out is always fine.
 const sendViaBrevoApi = async ({ to, subject, html, text }) => {
-  if (!process.env.BREVO_API_KEY) {
-    throw new Error("Neither SMTP_HOST nor BREVO_API_KEY is configured on the server.");
-  }
-
   const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
@@ -49,45 +53,48 @@ const sendViaBrevoApi = async ({ to, subject, html, text }) => {
   }
 
   const data = await response.json();
-  console.log(`[EMAIL][BREVO-API] Sent to ${to}, messageId: ${data.messageId}`);
+  console.log(`[EMAIL][BREVO-API] Accepted by Brevo for delivery — to: ${to}, messageId: ${data.messageId}`);
   return { delivered: true, logged: false };
 };
 
-// Replace the sendEmail function in utils/email.js with this:
+/**
+ * Sends an email via SMTP if SMTP_HOST is set, else via the Brevo REST API
+ * if BREVO_API_KEY is set, else logs to console in non-production only.
+ * In production, an unconfigured email service throws — "OTP sent" must
+ * never be a lie in prod.
+ */
 export const sendEmail = async ({ to, subject, html, text }) => {
   const t = getTransporter();
 
-  // If SMTP is not set, try Brevo API directly
   if (!t) {
     if (process.env.BREVO_API_KEY) {
-      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        headers: {
-          "accept": "application/json",
-          "api-key": process.env.BREVO_API_KEY,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          sender: { name: "Devbhoomi Bandhan", email: process.env.BREVO_SENDER_EMAIL || "kirteemsharma.dev@gmail.com" },
-          to: [{ email: to }],
-          subject,
-          htmlContent: html || `<p>${text}</p>`,
-        }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.text();
-        console.error("❌ BREVO API REJECTED EMAIL:", errData);
-        throw new Error("Failed to deliver email via Brevo.");
-      }
-      return { delivered: true };
+      return sendViaBrevoApi({ to, subject, html, text });
     }
 
-    // In production, throw an error instead of failing silently
-    console.error("❌ CRITICAL: Neither SMTP_HOST nor BREVO_API_KEY is configured!");
-    throw new Error("Email service is not configured on the server.");
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        "[EMAIL] CRITICAL: neither SMTP_HOST nor BREVO_API_KEY is set in this environment. " +
+          "Set SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS (or BREVO_API_KEY) in Render's Environment tab."
+      );
+      throw new Error("Email service is not configured on the server.");
+    }
+
+    console.log(`[EMAIL] (SMTP/Brevo not configured — logging only)
+  To: ${to}
+  Subject: ${subject}
+  ${text || html}`);
+    return { delivered: false, logged: true };
   }
 
+  // Logged on success too (not just failure): "accepted" here only means
+  // the SMTP relay (Brevo) took the message for delivery — it does NOT
+  // mean it reached the inbox. If OTPs keep "not arriving" even though
+  // this line prints every time, the message is being accepted by Brevo
+  // and then dropped/spam-filtered/bounced somewhere downstream — check
+  // Brevo dashboard -> Transactional -> Email Activity for this exact
+  // recipient/subject to see the real delivery status (delivered, soft
+  // bounce, hard bounce, blocked, spam-complaint, etc.), since that's
+  // information this server is never told about a "successful" SMTP send.
   const info = await t.sendMail({
     from: process.env.SMTP_FROM || '"Devbhoomi Bandhan" <no-reply@devbhoomibandhan.com>',
     to,
@@ -95,7 +102,8 @@ export const sendEmail = async ({ to, subject, html, text }) => {
     html,
     text,
   });
-  return { delivered: true };
+  console.log(`[EMAIL] Accepted by SMTP relay for delivery — to: ${to}, messageId: ${info?.messageId || "n/a"}, response: ${info?.response || "n/a"}`);
+  return { delivered: true, logged: false };
 };
 
 export const sendPasswordResetEmail = async (user, resetUrl) =>

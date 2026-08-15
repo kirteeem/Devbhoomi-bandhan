@@ -677,3 +677,13 @@ export const confirmEmailVerification = asyncHandler(async (req, res) => {
 
   ok(res, {}, "Email verified successfully.");
 });
+
+// DELETE /api/auth/me
+// FIXED: this export was deleted while authRoutes.js/Settings.tsx still
+// referenced it, which 404'd the frontend's "deactivate account" button.
+// Restored — flips the account to deactivated and clears refresh tokens so
+// existing sessions are logged out everywhere, without hard-deleting data.
+export const deactivateAccount = asyncHandler(async (req, res) => {
+  await User.findByIdAndUpdate(req.user._id, { $set: { status: "deactivated", refreshTokens: [] } });
+  ok(res, {}, "Your account has been deactivated");
+});

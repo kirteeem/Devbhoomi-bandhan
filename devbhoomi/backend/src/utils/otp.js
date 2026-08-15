@@ -138,17 +138,28 @@ export const generateAndSendOtp = async (
     } catch (err) {
       await otpRecord.deleteOne();
 
+      // "525 5.7.1 Unauthorized IP address" is a Brevo-account-level SMTP
+      // setting (IP-authorization for the SMTP key is turned on and this
+      // server's outbound IP isn't on the allowed list yet) — not something
+      // a code fix or retry here can resolve. Log a hint pointing straight
+      // at the fix so it isn't confused with a generic delivery failure.
       if (/unauthorized ip/i.test(err.message || "")) {
         console.error(
           "[OTP][EMAIL] Brevo rejected this server's IP (525 5.7.1 Unauthorized IP address). " +
-            "Ensure IP restriction is deactivated under Brevo Security Settings."
+            "Fix: Brevo dashboard → Settings → Senders, Domains & Dedicated IPs → Authorized IPs — " +
+            "add this server's outbound IP, or disable SMTP IP-authorization if the IP is expected to change " +
+            "(e.g. a cloud host without a static egress IP)."
         );
       } else {
         console.error("[OTP][EMAIL] Failed to send OTP email:", err.message);
       }
 
+      // NOTE: deliberately NOT forwarding err.message to the client — it
+      // can contain raw provider/API response details (e.g. a Brevo error
+      // payload) that shouldn't be shown to end users. Full detail is
+      // already logged above for debugging.
       const friendlyErr = new Error(
-        err.message || "We couldn't send your verification code by email right now. Please try again in a moment."
+        "We couldn't send your verification code by email right now. Please try again in a moment, or request the code by SMS instead."
       );
       friendlyErr.statusCode = 502;
       throw friendlyErr;

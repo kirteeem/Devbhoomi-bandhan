@@ -16,6 +16,7 @@ import {
   getMe,
   changePassword,
   updatePreferences,
+  deactivateAccount,
   forgotPassword,
   resetPassword,
   requestEmailVerification,
@@ -54,6 +55,10 @@ router.post("/logout", protect, logout);
 router.get("/me", protect, getMe);
 router.patch("/change-password", protect, validate(changePasswordSchema), changePassword);
 router.patch("/preferences", protect, validate(updatePreferencesSchema), updatePreferences);
+// FIXED: this was removed, but the frontend (Settings.tsx "deactivateAccount"
+// mutation) still calls DELETE /auth/me — without this route that button
+// was silently 404ing. Restored so account deactivation works again.
+router.delete("/me", protect, deactivateAccount);
 
 router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
