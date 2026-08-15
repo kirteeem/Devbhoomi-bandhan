@@ -1,6 +1,3 @@
-// Thin abstraction over an SMTP provider (SendGrid, SES, Gmail, etc).
-// If SMTP_HOST is not configured, emails are logged to the console instead of
-// failing, so the auth flows keep working end-to-end in local development.
 import nodemailer from "nodemailer";
 
 let transporter = null;
@@ -20,14 +17,56 @@ const getTransporter = () => {
   return transporter;
 };
 
-/**
- * Sends an email. Falls back to logging when SMTP isn't configured so that
- * signup/password-reset flows never hard-fail in dev/test environments.
- */
+// Direct Brevo REST API Fallback
+const sendViaBrevoApi = async ({ to, subject, html, text }) => {
+  if (!process.env.BREVO_API_KEY) {
+    throw new Error("Neither SMTP_HOST nor BREVO_API_KEY is configured on the server.");
+  }
+
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "api-key": process.env.BREVO_API_KEY,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      sender: {
+        name: "Devbhoomi Bandhan",
+        email: process.env.BREVO_SENDER_EMAIL || "kirteemsharma.dev@gmail.com",
+      },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html || `<p>${text}</p>`,
+      textContent: text,
+    }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text().catch(() => "");
+    console.error(`[EMAIL][BREVO-API] Failed (${response.status}): ${errBody}`);
+    throw new Error(`Brevo API Error (${response.status}): ${errBody}`);
+  }
+
+  const data = await response.json();
+  console.log(`[EMAIL][BREVO-API] Sent to ${to}, messageId: ${data.messageId}`);
+  return { delivered: true, logged: false };
+};
+
 export const sendEmail = async ({ to, subject, html, text }) => {
   const t = getTransporter();
 
+  // If SMTP isn't configured, attempt direct Brevo REST API before falling back to dev console
   if (!t) {
+    if (process.env.BREVO_API_KEY) {
+      return await sendViaBrevoApi({ to, subject, html, text });
+    }
+
+    if (process.env.NODE_ENV === "production") {
+      console.error("[EMAIL] SMTP_HOST or BREVO_API_KEY is missing in production!");
+      throw new Error("Email service is not configured on this server.");
+    }
+
     console.log(`[EMAIL] (SMTP not configured — logging only)
   To: ${to}
   Subject: ${subject}
@@ -35,15 +74,6 @@ export const sendEmail = async ({ to, subject, html, text }) => {
     return { delivered: false, logged: true };
   }
 
-  // Logged on success too (not just failure): "accepted" here only means
-  // the SMTP relay (Brevo) took the message for delivery — it does NOT
-  // mean it reached the inbox. If OTPs keep "not arriving" even though
-  // this line prints every time, the message is being accepted by Brevo
-  // and then dropped/spam-filtered/bounced somewhere downstream — check
-  // Brevo dashboard -> Transactional -> Email Activity for this exact
-  // recipient/subject to see the real delivery status (delivered, soft
-  // bounce, hard bounce, blocked, spam-complaint, etc.), since that's
-  // information this server is never told about a "successful" SMTP send.
   const info = await t.sendMail({
     from: process.env.SMTP_FROM || '"Devbhoomi Bandhan" <no-reply@devbhoomibandhan.com>',
     to,
@@ -51,7 +81,11 @@ export const sendEmail = async ({ to, subject, html, text }) => {
     html,
     text,
   });
-  console.log(`[EMAIL] Accepted by SMTP relay for delivery — to: ${to}, messageId: ${info?.messageId || "n/a"}, response: ${info?.response || "n/a"}`);
+  console.log(
+    `[EMAIL] Accepted by SMTP relay for delivery — to: ${to}, messageId: ${
+      info?.messageId || "n/a"
+    }`
+  );
   return { delivered: true, logged: false };
 };
 
@@ -63,10 +97,6 @@ export const sendPasswordResetEmail = async (user, resetUrl) =>
     html: `<p>Hi ${user.fullName},</p><p>Use the link below to reset your Devbhoomi Bandhan password. This link is valid for <strong>30 minutes</strong>.</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>If you did not request this, you can safely ignore this email.</p>`,
   });
 
-// Sent when a member chooses (or falls back to) "Get code by email" on the
-// OTP login screen — uses the same Brevo SMTP connection as every other
-// transactional email here, so it works even though the SMS channel needs
-// a separate Brevo SMS API key + DLT-registered sender to deliver in India.
 export const sendOtpEmail = async ({ email, code, purpose = "login" }) =>
   sendEmail({
     to: email,
@@ -89,11 +119,6 @@ export const sendEmailVerificationEmail = async (user, verifyUrl) =>
     html: `<p>Hi ${user.fullName},</p><p>Please verify your email address to unlock all features of your account.</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>This link is valid for <strong>24 hours</strong>.</p>`,
   });
 
-// Sent whenever an in-app Notification document is created for a user (new
-// kundali report ready, etc.) so members who
-// aren't actively browsing the site still hear about activity on their
-// profile. Kept generic/lightweight — the in-app notification is always the
-// source of truth; this email just points people back to it.
 export const sendNotificationEmail = async ({ user, title, body, appUrl }) => {
   if (!user?.email) return { delivered: false, logged: false };
 
@@ -115,16 +140,8 @@ export const sendNotificationEmail = async ({ user, title, body, appUrl }) => {
   });
 };
 
-// Fixed inbox that reviews every free kundali-matching request submitted on
-// the platform. Kept as a constant here (rather than scattered inline)
-// so it only needs updating in one place.
 export const PRIEST_REQUEST_EMAIL = "kirteemsharma.dev@gmail.com";
 
-// Sent once per member (see User.idVerificationEmailSent), the first time
-// their profile is complete enough to be worth manually reviewing — gives
-// the priest/verification team a chance to cross-check the member's stated
-// identity (name, phone, email, address) before the profile is marked
-// isProfileVerified, cutting down on fake/duplicate profiles.
 export const sendIdVerificationEmail = async ({ user, profile }) =>
   sendEmail({
     to: PRIEST_REQUEST_EMAIL,
@@ -183,10 +200,6 @@ export const sendKundaliMatchRequestEmail = async ({ requester, partner, phone, 
       <p>Please review both members' kundali details and share the report.</p>
     `,
   });
-
-// --- Identity verification (Blue Tick) workflow --------------------------
-// Three emails covering the full lifecycle of a VerificationRequest — see
-// controllers/verificationController.js for where each is triggered.
 
 export const sendVerificationSubmittedEmail = async (user) => {
   if (!user?.email) return { delivered: false, logged: false };
