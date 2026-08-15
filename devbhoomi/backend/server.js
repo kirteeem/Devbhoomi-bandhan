@@ -8,8 +8,6 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import mongoSanitize from "express-mongo-sanitize";
 import { Server as SocketIOServer } from "socket.io";
-import fs from "fs"; 
-import path from "path";
 
 import { connectDB } from "./src/config/db.js";
 import { errorHandler, notFound } from "./src/middleware/errorHandler.js";
@@ -40,20 +38,16 @@ await connectDB();
 const app = express();
 const server = http.createServer(app);
 
-// Enable proxy trust
+// Enable proxy trust for deployment platforms like Render
 app.set("trust proxy", 1);
 
-// Allowed frontend origins.
-// IMPORTANT: this used to be a hardcoded array (including a typo'd Render
-// URL — "deevbhoomi" instead of "devbhoomi") which silently blocked every
-// request from the real deployed frontend via CORS, breaking login, the
-// dashboard, and the admin panel in production while working fine on
-// localhost. It now reads from CLIENT_URL (comma-separate multiple origins
-// if you have more than one, e.g. a custom domain + the Render URL) so a
-// redeploy to a new URL never requires an app code change again.
+// Parse allowed client origins (Includes custom domain, render deployment, and local dev)
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
+  "https://devbhoomi-bandhan.onrender.com",
+  "https://devbhoomi-bandhan.com",
+  "https://www.devbhoomi-bandhan.com",
   ...(process.env.CLIENT_URL || "")
     .split(",")
     .map((url) => url.trim().replace(/\/$/, ""))
@@ -62,7 +56,7 @@ const allowedOrigins = [
 
 console.log("Allowed CORS origins:", allowedOrigins);
 
-// Socket.IO
+// Socket.IO CORS Setup
 const io = new SocketIOServer(server, {
   cors: {
     origin: allowedOrigins,
@@ -73,30 +67,32 @@ const io = new SocketIOServer(server, {
 initSocket(io);
 app.set("io", io);
 
-// Express CORS
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin) {
-        return callback(null, true);
-      }
+// Express CORS Configuration
+const corsOptions = {
+  origin(origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, or server-to-server calls)
+    if (!origin) {
+      return callback(null, true);
+    }
 
-      const normalizedOrigin = origin.replace(/\/$/, "");
+    const normalizedOrigin = origin.replace(/\/$/, "");
 
-      if (allowedOrigins.includes(normalizedOrigin)) {
-        return callback(null, true);
-      }
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
 
-      console.log("CORS blocked origin:", origin);
-      return callback(new Error(`CORS blocked: ${origin}`));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+    console.warn("CORS blocked request from origin:", origin);
+    // Return null, false to safely reject without throwing host-level connection aborts
+    return callback(null, false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
 
-app.options("*", cors());
+app.use(cors(corsOptions));
+// Handle preflight OPTIONS requests reliably across all routes
+app.options(/(.*)/, cors(corsOptions));
 
 // ─── 1. HELMET SECURITY SETUP ───────────────────────────────────────────
 app.use(
@@ -112,21 +108,10 @@ app.use(
   })
 );
 
-// Gzip every JSON/text response. Profile lists and dashboard payloads are
-// mostly repetitive JSON, so this typically cuts transfer size ~70-80% —
-// on a slow/mobile connection that's a big chunk of perceived latency,
-// for the cost of a small amount of CPU per request.
 app.use(compression());
 
-// ─── 2. STATIC FILE RESOLUTION ───────────────────────────────────────────
-// NOTE: local /uploads static serving was removed here. All photo/document
-// uploads now go straight to Cloudinary (see middleware/imageUpload.js and
-// utils/cloudinary.js) — nothing in this app writes to a local uploads
-// directory anymore, so serving one (with a wildcard CORS origin, no less)
-// was unused legacy surface left over from the old disk-storage flow.
-
-// ─── 3. REQUEST PARSERS & WEBHOOKS ────────────────────────────────────────
-// CRITICAL: Webhook is defined BEFORE standard JSON parsers and BEFORE global rate limiters
+// ─── 2. REQUEST PARSERS & WEBHOOKS ────────────────────────────────────────
+// Webhook route must precede global JSON parsers and rate limiters
 app.post("/api/payments/webhook", express.raw({ type: "application/json" }), handleWebhook);
 
 app.use(express.json({ limit: "10mb" }));
@@ -134,7 +119,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(mongoSanitize());
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
-// ─── 4. RATE LIMITERS ───────────────────────────────────────────────────
+// ─── 3. RATE LIMITERS ───────────────────────────────────────────────────
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 300,
@@ -151,9 +136,6 @@ const authLimiter = rateLimit({
   message: { success: false, message: "Too many auth attempts, please try again later." },
 });
 
-// OTP endpoints get their own tighter limit — a phone number's own resend
-// cooldown (in otp.js) prevents rapid resends, but this stops someone from
-// hammering many different phone numbers from one IP to run up SMS costs.
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
@@ -162,13 +144,12 @@ const otpLimiter = rateLimit({
   message: { success: false, message: "Too many OTP requests from this device, please try again later." },
 });
 
-// Apply rate limiting selectively to safeguard your webhooks
 app.use("/api/auth/otp", otpLimiter);
 app.use("/api/auth/phone", otpLimiter);
 app.use("/api/auth", authLimiter);
-app.use("/api", apiLimiter); 
+app.use("/api", apiLimiter);
 
-// ─── 5. APPLICATION API ROUTES ───────────────────────────────────────────
+// ─── 4. APPLICATION API ROUTES ───────────────────────────────────────────
 app.get("/api/health", (req, res) =>
   res.json({
     success: true,
@@ -192,7 +173,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/contact", contactRoutes);
 app.use("/api/safety", safetyRoutes);
 
-// ─── 6. FALLBACK ERROR HANDLERS ──────────────────────────────────────────
+// ─── 5. FALLBACK ERROR HANDLERS ──────────────────────────────────────────
 app.use(notFound);
 app.use(errorHandler);
 
