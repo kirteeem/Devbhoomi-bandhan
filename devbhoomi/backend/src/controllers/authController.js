@@ -28,12 +28,12 @@ const toPublicUser = (user) => ({
   isPhoneVerified: user.isPhoneVerified,
   isEmailVerified: user.isEmailVerified,
   lastLoginAt: user.lastLoginAt,
-  isPremium: user.isPremium(),
+  isPremium: user.isPremium ? user.isPremium() : false,
   premiumUntil: user.premiumUntil,
-  freeUnlocksRemaining: user.freeUnlocksLeft(),
-  planUnlocksRemaining: user.planUnlocksRemaining(),
-  freeKundaliRemaining: user.freeKundaliLeft(),
-  kundaliMatchesRemaining: user.kundaliMatchesRemaining(),
+  freeUnlocksRemaining: user.freeUnlocksLeft ? user.freeUnlocksLeft() : 0,
+  planUnlocksRemaining: user.planUnlocksRemaining ? user.planUnlocksRemaining() : 0,
+  freeKundaliRemaining: user.freeKundaliLeft ? user.freeKundaliLeft() : 0,
+  kundaliMatchesRemaining: user.kundaliMatchesRemaining ? user.kundaliMatchesRemaining() : 0,
   idCardName: user.idCardName,
   aadharImage: user.aadharImage,
   panImage: user.panImage,
@@ -134,12 +134,14 @@ export const confirmEmailVerificationSchema = z.object({
 });
 
 const issueTokensAndRespond = async (res, user, statusCode = 200) => {
-  console.log("issueTokensAndRespond called");
   const accessToken = generateAccessToken(user._id);
   const refreshToken = generateRefreshToken(user._id);
+  
   user.refreshTokens = [...(user.refreshTokens || []), refreshToken].slice(-5);
   user.lastLoginAt = new Date();
-  await user.save();
+  
+  // FIX: Disable full schema re-validation on token save to prevent missing field errors on old users
+  await user.save({ validateBeforeSave: false });
 
   return res.status(statusCode).json({
     success: true,
@@ -168,31 +170,21 @@ const issueSignupPhoneToken = (phone) =>
     expiresIn: SIGNUP_PHONE_TOKEN_TTL,
   });
 
-// POST /api/auth/signup/email-otp/request  { email }
-// First step of email verification on the Signup page: sends a 6-digit code
-// to the address the member just typed, before any account is created.
+// POST /api/auth/signup/email-otp/request
 export const requestSignupEmailOtp = asyncHandler(async (req, res) => {
-  console.log("=== STEP 1: OTP REQUEST STARTED ===");
   const { email } = signupEmailOtpRequestSchema.parse(req.body);
-  console.log("=== STEP 2: EMAIL PARSED ===", email);
 
-  console.log("=== STEP 3: BEFORE MONGO USER FIND ===");
   const existing = await User.findOne({ email });
-  console.log("=== STEP 4: AFTER MONGO USER FIND ===");
-
   if (existing) {
     res.status(409);
     throw new Error("An account with this email already exists. Please sign in instead.");
   }
 
-  console.log("=== STEP 5: BEFORE GENERATE AND SEND OTP ===");
   await generateAndSendOtp(email, { purpose: "signup_email_verify", channel: "email" });
-  console.log("=== STEP 6: AFTER GENERATE AND SEND OTP ===");
-
-  ok(res, {}, "OTP sent to your email. It will expire in a few minutes.");
+  return ok(res, {}, "OTP sent to your email. It will expire in a few minutes.");
 });
 
-// POST /api/auth/signup/email-otp/verify  { email, code }
+// POST /api/auth/signup/email-otp/verify
 export const verifySignupEmailOtp = asyncHandler(async (req, res) => {
   const { email, code } = signupEmailOtpVerifySchema.parse(req.body);
 
@@ -203,10 +195,10 @@ export const verifySignupEmailOtp = asyncHandler(async (req, res) => {
   }
 
   const emailVerificationToken = issueSignupEmailToken(email);
-  ok(res, { emailVerificationToken }, "Email verified. You can now complete your signup.");
+  return ok(res, { emailVerificationToken }, "Email verified. You can now complete your signup.");
 });
 
-// POST /api/auth/signup/phone-otp/request  { phone }
+// POST /api/auth/signup/phone-otp/request
 export const requestSignupPhoneOtp = asyncHandler(async (req, res) => {
   const { phone } = signupPhoneOtpRequestSchema.parse(req.body);
 
@@ -217,10 +209,10 @@ export const requestSignupPhoneOtp = asyncHandler(async (req, res) => {
   }
 
   await generateAndSendOtp(phone, { purpose: "signup_phone_verify", channel: "sms" });
-  ok(res, {}, "OTP sent to your phone. It will expire in a few minutes.");
+  return ok(res, {}, "OTP sent to your phone. It will expire in a few minutes.");
 });
 
-// POST /api/auth/signup/phone-otp/verify  { phone, code }
+// POST /api/auth/signup/phone-otp/verify
 export const verifySignupPhoneOtp = asyncHandler(async (req, res) => {
   const { phone, code } = signupPhoneOtpVerifySchema.parse(req.body);
 
@@ -231,13 +223,11 @@ export const verifySignupPhoneOtp = asyncHandler(async (req, res) => {
   }
 
   const phoneVerificationToken = issueSignupPhoneToken(phone);
-  ok(res, { phoneVerificationToken }, "Phone number verified. You can now complete your signup.");
+  return ok(res, { phoneVerificationToken }, "Phone number verified. You can now complete your signup.");
 });
 
 // POST /api/auth/signup
 export const signup = asyncHandler(async (req, res) => {
-  console.log("STEP 1: Request received");
-
   const {
     fullName,
     phoneNumber,
@@ -248,8 +238,6 @@ export const signup = asyncHandler(async (req, res) => {
     emailVerificationToken,
     phoneVerificationToken,
   } = signupSchema.parse(req.body);
-
-  console.log("STEP 2: Validation complete");
 
   let decodedEmailToken;
   try {
@@ -285,15 +273,10 @@ export const signup = asyncHandler(async (req, res) => {
   const emailUser = await User.findOne({ email });
   const phoneUser = await User.findOne({ phone: phoneNumber });
 
-  console.log("Email User:", emailUser);
-  console.log("Phone User:", phoneUser);
-
   if (emailUser || phoneUser) {
     res.status(409);
     throw new Error("An account with this phone or email already exists");
   }
-
-  console.log("STEP 3: Inserting user record");
 
   const user = await User.create({
     fullName,
@@ -307,24 +290,18 @@ export const signup = asyncHandler(async (req, res) => {
     isPhoneVerified: true,
   });
 
-  console.log("STEP 7: Initializing user application profiles");
-
   await Profile.create({ user: user._id });
-
-  console.log("STEP 8: Handing off to token issuer");
-
-  await issueTokensAndRespond(res, user, 201);
-
-  console.log("STEP 9: Pipeline finished cleanly");
+  return await issueTokensAndRespond(res, user, 201);
 });
 
 // POST /api/auth/login
 export const login = asyncHandler(async (req, res) => {
   const { identifier, password } = loginSchema.parse(req.body);
+  const loginInput = identifier.toLowerCase().trim();
 
-  const user = await User.findOne({ $or: [{ phone: identifier }, { email: identifier }] }).select(
-    "+passwordHash +refreshTokens +failedLoginAttempts +lockUntil"
-  );
+  const user = await User.findOne({
+    $or: [{ phone: loginInput }, { email: loginInput }],
+  }).select("+passwordHash +refreshTokens +failedLoginAttempts +lockUntil");
 
   if (user) {
     const { locked, retryAfterSeconds } = getLockStatus(user);
@@ -344,13 +321,14 @@ export const login = asyncHandler(async (req, res) => {
     res.status(401);
     throw new Error("Invalid credentials");
   }
+
   if (user.status !== "active") {
     res.status(403);
     throw new Error("This account is not active");
   }
 
   await resetLoginAttempts(user);
-  await issueTokensAndRespond(res, user);
+  return await issueTokensAndRespond(res, user);
 });
 
 const phoneSchema = z
@@ -370,8 +348,20 @@ const resolveOtpIdentifier = (body) => {
 // POST /api/auth/otp/request
 export const requestOtp = asyncHandler(async (req, res) => {
   const { identifier, channel } = resolveOtpIdentifier(req.body);
-  await generateAndSendOtp(identifier, { purpose: "login_or_signup", channel });
-  ok(
+
+  // DB Check if purpose indicates signup
+  if (req.body.purpose === "signup") {
+    const existing = await User.findOne({
+      $or: [{ email: identifier }, { phone: identifier }],
+    });
+    if (existing) {
+      res.status(409);
+      throw new Error("An account with this email/phone already exists. Please log in.");
+    }
+  }
+
+  await generateAndSendOtp(identifier, { purpose: req.body.purpose || "login_or_signup", channel });
+  return ok(
     res,
     { channel },
     channel === "email"
@@ -386,7 +376,7 @@ export const verifyOtpAndLogin = asyncHandler(async (req, res) => {
   const code = String(req.body.code || "").trim();
   const fullName = req.body.fullName;
 
-  const isValid = await verifyOtp(identifier, code, { purpose: "login_or_signup" });
+  const isValid = await verifyOtp(identifier, code, { purpose: req.body.purpose || "login_or_signup" });
   if (!isValid) {
     res.status(400);
     throw new Error("Invalid or expired OTP. Please request a new one.");
@@ -404,13 +394,13 @@ export const verifyOtpAndLogin = asyncHandler(async (req, res) => {
     await Profile.create({ user: user._id });
   } else if (channel === "email" && !user.isEmailVerified) {
     user.isEmailVerified = true;
-    await user.save();
+    await user.save({ validateBeforeSave: false });
   } else if (channel === "sms" && !user.isPhoneVerified) {
     user.isPhoneVerified = true;
-    await user.save();
+    await user.save({ validateBeforeSave: false });
   }
 
-  await issueTokensAndRespond(res, user);
+  return await issueTokensAndRespond(res, user);
 });
 
 // POST /api/auth/phone/request-otp
@@ -424,7 +414,7 @@ export const requestPhoneBindOtp = asyncHandler(async (req, res) => {
   }
 
   await generateAndSendOtp(phone, { purpose: "bind_phone", userId: req.user._id });
-  ok(res, {}, "OTP sent to your phone. It will expire in a few minutes.");
+  return ok(res, {}, "OTP sent to your phone. It will expire in a few minutes.");
 });
 
 // POST /api/auth/phone/verify-otp
@@ -447,9 +437,9 @@ export const verifyPhoneBindOtp = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
   user.phone = phone;
   user.isPhoneVerified = true;
-  await user.save();
+  await user.save({ validateBeforeSave: false });
 
-  ok(res, { user: toPublicUser(user) }, "Phone number verified and linked to your account.");
+  return ok(res, { user: toPublicUser(user) }, "Phone number verified and linked to your account.");
 });
 
 // POST /api/auth/google
@@ -491,7 +481,7 @@ export const googleLogin = asyncHandler(async (req, res) => {
   } else if (!user.googleId) {
     user.googleId = googleId;
     if (emailVerified) user.isEmailVerified = true;
-    await user.save();
+    await user.save({ validateBeforeSave: false });
   }
 
   if (user.status !== "active") {
@@ -499,7 +489,7 @@ export const googleLogin = asyncHandler(async (req, res) => {
     throw new Error("This account is not active");
   }
 
-  await issueTokensAndRespond(res, user);
+  return await issueTokensAndRespond(res, user);
 });
 
 // POST /api/auth/refresh
@@ -525,7 +515,7 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
   }
 
   const newAccessToken = generateAccessToken(user._id);
-  ok(res, { accessToken: newAccessToken }, "Token refreshed");
+  return ok(res, { accessToken: newAccessToken }, "Token refreshed");
 });
 
 // POST /api/auth/logout
@@ -533,14 +523,14 @@ export const logout = asyncHandler(async (req, res) => {
   const { refreshToken } = req.body;
   if (refreshToken && req.user) {
     req.user.refreshTokens = (req.user.refreshTokens || []).filter((t) => t !== refreshToken);
-    await req.user.save();
+    await req.user.save({ validateBeforeSave: false });
   }
-  ok(res, {}, "Logged out");
+  return ok(res, {}, "Logged out");
 });
 
 // GET /api/auth/me
 export const getMe = asyncHandler(async (req, res) => {
-  ok(res, { user: toPublicUser(req.user) });
+  return ok(res, { user: toPublicUser(req.user) });
 });
 
 // PATCH /api/auth/change-password
@@ -557,7 +547,7 @@ export const changePassword = asyncHandler(async (req, res) => {
   user.refreshTokens = [];
   await user.save();
 
-  ok(res, {}, "Password updated. Please log in again on other devices.");
+  return ok(res, {}, "Password updated. Please log in again on other devices.");
 });
 
 // PATCH /api/auth/preferences
@@ -569,7 +559,7 @@ export const updatePreferences = asyncHandler(async (req, res) => {
     { $set: validatedBody },
     { new: true, runValidators: true }
   );
-  ok(res, { user: toPublicUser(user) }, "Preferences updated");
+  return ok(res, { user: toPublicUser(user) }, "Preferences updated");
 });
 
 // POST /api/auth/forgot-password
@@ -591,11 +581,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   try {
     await sendPasswordResetEmail(user, resetUrl);
   } catch (err) {
-    console.error("BREVO EMAIL ERROR:");
-    console.error(err);
-    console.error(err.message);
-    console.error(err.response);
-
+    console.error("BREVO EMAIL ERROR:", err);
     user.passwordResetTokenHash = undefined;
     user.passwordResetExpires = undefined;
     await user.save({ validateBeforeSave: false });
@@ -604,7 +590,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
     throw err;
   }
 
-  ok(res, {}, genericMessage);
+  return ok(res, {}, genericMessage);
 });
 
 // POST /api/auth/reset-password
@@ -628,7 +614,7 @@ export const resetPassword = asyncHandler(async (req, res) => {
   user.refreshTokens = [];
   await user.save();
 
-  ok(res, {}, "Your password has been reset. Please log in with your new password.");
+  return ok(res, {}, "Your password has been reset. Please log in with your new password.");
 });
 
 // POST /api/auth/verify-email/request
@@ -652,7 +638,7 @@ export const requestEmailVerification = asyncHandler(async (req, res) => {
   const verifyUrl = `${clientUrl}/verify-email?token=${rawToken}`;
   await sendEmailVerificationEmail(user, verifyUrl);
 
-  ok(res, {}, "Verification email sent. Please check your inbox.");
+  return ok(res, {}, "Verification email sent. Please check your inbox.");
 });
 
 // POST /api/auth/verify-email/confirm
@@ -673,17 +659,13 @@ export const confirmEmailVerification = asyncHandler(async (req, res) => {
   user.isEmailVerified = true;
   user.emailVerificationTokenHash = undefined;
   user.emailVerificationExpires = undefined;
-  await user.save();
+  await user.save({ validateBeforeSave: false });
 
-  ok(res, {}, "Email verified successfully.");
+  return ok(res, {}, "Email verified successfully.");
 });
 
 // DELETE /api/auth/me
-// FIXED: this export was deleted while authRoutes.js/Settings.tsx still
-// referenced it, which 404'd the frontend's "deactivate account" button.
-// Restored — flips the account to deactivated and clears refresh tokens so
-// existing sessions are logged out everywhere, without hard-deleting data.
 export const deactivateAccount = asyncHandler(async (req, res) => {
   await User.findByIdAndUpdate(req.user._id, { $set: { status: "deactivated", refreshTokens: [] } });
-  ok(res, {}, "Your account has been deactivated");
+  return ok(res, {}, "Your account has been deactivated");
 });
