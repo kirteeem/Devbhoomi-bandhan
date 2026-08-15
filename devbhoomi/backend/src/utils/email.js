@@ -53,25 +53,39 @@ const sendViaBrevoApi = async ({ to, subject, html, text }) => {
   return { delivered: true, logged: false };
 };
 
+// Replace the sendEmail function in utils/email.js with this:
 export const sendEmail = async ({ to, subject, html, text }) => {
   const t = getTransporter();
 
-  // If SMTP isn't configured, attempt direct Brevo REST API before falling back to dev console
+  // If SMTP is not set, try Brevo API directly
   if (!t) {
     if (process.env.BREVO_API_KEY) {
-      return await sendViaBrevoApi({ to, subject, html, text });
+      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "accept": "application/json",
+          "api-key": process.env.BREVO_API_KEY,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          sender: { name: "Devbhoomi Bandhan", email: process.env.BREVO_SENDER_EMAIL || "kirteemsharma.dev@gmail.com" },
+          to: [{ email: to }],
+          subject,
+          htmlContent: html || `<p>${text}</p>`,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.text();
+        console.error("❌ BREVO API REJECTED EMAIL:", errData);
+        throw new Error("Failed to deliver email via Brevo.");
+      }
+      return { delivered: true };
     }
 
-    if (process.env.NODE_ENV === "production") {
-      console.error("[EMAIL] SMTP_HOST or BREVO_API_KEY is missing in production!");
-      throw new Error("Email service is not configured on this server.");
-    }
-
-    console.log(`[EMAIL] (SMTP not configured — logging only)
-  To: ${to}
-  Subject: ${subject}
-  ${text || html}`);
-    return { delivered: false, logged: true };
+    // In production, throw an error instead of failing silently
+    console.error("❌ CRITICAL: Neither SMTP_HOST nor BREVO_API_KEY is configured!");
+    throw new Error("Email service is not configured on the server.");
   }
 
   const info = await t.sendMail({
@@ -81,12 +95,7 @@ export const sendEmail = async ({ to, subject, html, text }) => {
     html,
     text,
   });
-  console.log(
-    `[EMAIL] Accepted by SMTP relay for delivery — to: ${to}, messageId: ${
-      info?.messageId || "n/a"
-    }`
-  );
-  return { delivered: true, logged: false };
+  return { delivered: true };
 };
 
 export const sendPasswordResetEmail = async (user, resetUrl) =>
