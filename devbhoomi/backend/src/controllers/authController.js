@@ -57,12 +57,7 @@ export const signupSchema = z.object({
     .regex(/[0-9]/, "Password must contain at least one number"),
   gender: z.enum(["male", "female", "other"]),
   createdFor: z.enum(["self", "son", "daughter", "sibling", "relative"]).default("self"),
-  // Issued by /auth/signup/email-otp/verify once the member proves they own
-  // the email address they typed in. Signup is rejected without a valid,
-  // matching token — see requireVerifiedSignupEmail below.
   emailVerificationToken: z.string().min(10, "Please verify your email address before continuing"),
-  // Issued by /auth/signup/phone-otp/verify once the member proves they own
-  // the phone number they typed in — same pattern as the email token above.
   phoneVerificationToken: z.string().min(10, "Please verify your phone number before continuing"),
 });
 
@@ -92,7 +87,7 @@ export const signupEmailOtpVerifySchema = z.object({
 
 export const verificationRequestSchema = z.object({
   idCardName: z.string().trim().min(2, "Enter the name exactly as printed on your ID card").max(100),
-  aadharImage: z.string().trim().url("Upload a valid Aadhaar card image first").optional(),
+  aadharImage: z.string().trim().url("Upload a valid identity document image first").optional(),
   panImage: z.string().trim().url("Upload a valid PAN card image first").optional(),
   selfieImage: z.string().trim().url("Upload a clear selfie first"),
 });
@@ -157,11 +152,6 @@ const issueTokensAndRespond = async (res, user, statusCode = 200) => {
   });
 };
 
-// A signup email-verification token is a short-lived JWT (not stored in
-// Mongo) proving "this email address's OTP was verified a few minutes ago".
-// Kept stateless/self-contained so it slots into the existing signup
-// request without a new collection — see requestSignupEmailOtp /
-// verifySignupEmailOtp / signup below.
 const SIGNUP_EMAIL_TOKEN_PURPOSE = "signup_email_verified";
 const SIGNUP_EMAIL_TOKEN_TTL = "20m";
 
@@ -170,7 +160,6 @@ const issueSignupEmailToken = (email) =>
     expiresIn: SIGNUP_EMAIL_TOKEN_TTL,
   });
 
-// Same pattern as the email token above, for phone number verification.
 const SIGNUP_PHONE_TOKEN_PURPOSE = "signup_phone_verified";
 const SIGNUP_PHONE_TOKEN_TTL = "20m";
 
@@ -183,22 +172,27 @@ const issueSignupPhoneToken = (phone) =>
 // First step of email verification on the Signup page: sends a 6-digit code
 // to the address the member just typed, before any account is created.
 export const requestSignupEmailOtp = asyncHandler(async (req, res) => {
+  console.log("=== STEP 1: OTP REQUEST STARTED ===");
   const { email } = signupEmailOtpRequestSchema.parse(req.body);
+  console.log("=== STEP 2: EMAIL PARSED ===", email);
 
+  console.log("=== STEP 3: BEFORE MONGO USER FIND ===");
   const existing = await User.findOne({ email });
+  console.log("=== STEP 4: AFTER MONGO USER FIND ===");
+
   if (existing) {
     res.status(409);
     throw new Error("An account with this email already exists. Please sign in instead.");
   }
 
+  console.log("=== STEP 5: BEFORE GENERATE AND SEND OTP ===");
   await generateAndSendOtp(email, { purpose: "signup_email_verify", channel: "email" });
+  console.log("=== STEP 6: AFTER GENERATE AND SEND OTP ===");
+
   ok(res, {}, "OTP sent to your email. It will expire in a few minutes.");
 });
 
 // POST /api/auth/signup/email-otp/verify  { email, code }
-// Second step: checks the code and, on success, hands back a short-lived
-// token the frontend attaches to the actual /auth/signup submission —
-// proof that this email was verified without creating an account yet.
 export const verifySignupEmailOtp = asyncHandler(async (req, res) => {
   const { email, code } = signupEmailOtpVerifySchema.parse(req.body);
 
@@ -213,11 +207,6 @@ export const verifySignupEmailOtp = asyncHandler(async (req, res) => {
 });
 
 // POST /api/auth/signup/phone-otp/request  { phone }
-// Verifies phone ownership on the Signup page before an account is
-// created — reduces fake/junk accounts signing up with numbers they don't
-// actually control. Sent via Message Central when configured (see
-// utils/messageCentral.js), otherwise falls back to whatever
-// generateAndSendOtp's default SMS path is set up to do.
 export const requestSignupPhoneOtp = asyncHandler(async (req, res) => {
   const { phone } = signupPhoneOtpRequestSchema.parse(req.body);
 
@@ -232,9 +221,6 @@ export const requestSignupPhoneOtp = asyncHandler(async (req, res) => {
 });
 
 // POST /api/auth/signup/phone-otp/verify  { phone, code }
-// Second step: checks the code and, on success, hands back a short-lived
-// token the frontend attaches to the actual /auth/signup submission —
-// proof that this phone number was verified without creating an account yet.
 export const verifySignupPhoneOtp = asyncHandler(async (req, res) => {
   const { phone, code } = signupPhoneOtpVerifySchema.parse(req.body);
 
@@ -252,7 +238,6 @@ export const verifySignupPhoneOtp = asyncHandler(async (req, res) => {
 export const signup = asyncHandler(async (req, res) => {
   console.log("STEP 1: Request received");
 
-  // FIXED: Destructured fields explicitly from the validation parse result
   const {
     fullName,
     phoneNumber,
@@ -266,9 +251,6 @@ export const signup = asyncHandler(async (req, res) => {
 
   console.log("STEP 2: Validation complete");
 
-  // Confirm the member actually verified this exact email address via OTP
-  // (see requestSignupEmailOtp / verifySignupEmailOtp above) before we ever
-  // create the account.
   let decodedEmailToken;
   try {
     decodedEmailToken = jwt.verify(emailVerificationToken, process.env.JWT_ACCESS_SECRET);
@@ -284,10 +266,6 @@ export const signup = asyncHandler(async (req, res) => {
     throw new Error("Please verify this email address before continuing.");
   }
 
-  // Same check for the phone number — see requestSignupPhoneOtp /
-  // verifySignupPhoneOtp above. Compared by last-10-digits so formatting
-  // differences (+91 vs no prefix, spaces, etc.) between the OTP step and
-  // this submission don't cause a false mismatch.
   let decodedPhoneToken;
   try {
     decodedPhoneToken = jwt.verify(phoneVerificationToken, process.env.JWT_ACCESS_SECRET);
@@ -304,24 +282,19 @@ export const signup = asyncHandler(async (req, res) => {
     throw new Error("Please verify this phone number before continuing.");
   }
 
-const emailUser = await User.findOne({ email });
-const phoneUser = await User.findOne({ phone: phoneNumber });
+  const emailUser = await User.findOne({ email });
+  const phoneUser = await User.findOne({ phone: phoneNumber });
 
-console.log("Email User:", emailUser);
-console.log("Phone User:", phoneUser);
+  console.log("Email User:", emailUser);
+  console.log("Phone User:", phoneUser);
 
-if (emailUser || phoneUser) {
-  res.status(409);
-  throw new Error("An account with this phone or email already exists");
-}
+  if (emailUser || phoneUser) {
+    res.status(409);
+    throw new Error("An account with this phone or email already exists");
+  }
 
   console.log("STEP 3: Inserting user record");
 
-  // No Aadhaar / government-ID number is collected at signup any more.
-  // New accounts start unverified (isProfileVerified: false) and are
-  // reviewed manually by the admin/priest team once the member has filled
-  // in their profile and (optionally) a photo — see adminController.js
-  // verifyProfile and the /admin panel on the frontend.
   const user = await User.create({
     fullName,
     phone: phoneNumber,
@@ -330,8 +303,6 @@ if (emailUser || phoneUser) {
     gender,
     createdFor,
     authProvider: "password",
-    // The signup OTP steps above already proved ownership of this email
-    // and this phone number.
     isEmailVerified: true,
     isPhoneVerified: true,
   });
@@ -355,9 +326,6 @@ export const login = asyncHandler(async (req, res) => {
     "+passwordHash +refreshTokens +failedLoginAttempts +lockUntil"
   );
 
-  // Per-account lockout check — independent of the per-IP authLimiter.
-  // Checked before comparing the password so a locked-out account can't be
-  // used to keep probing passwords during its own cooldown window.
   if (user) {
     const { locked, retryAfterSeconds } = getLockStatus(user);
     if (locked) {
@@ -372,9 +340,6 @@ export const login = asyncHandler(async (req, res) => {
   const passwordMatch = user ? await user.comparePassword(password) : false;
 
   if (!user || !user.passwordHash || !passwordMatch) {
-    // Only register a failed attempt when the account actually exists —
-    // otherwise this would let an attacker distinguish valid from invalid
-    // identifiers by whether a lockout eventually appears.
     if (user) await registerFailedLoginAttempt(user);
     res.status(401);
     throw new Error("Invalid credentials");
@@ -395,10 +360,6 @@ const phoneSchema = z
 
 const otpEmailSchema = z.string().trim().toLowerCase().email("Enter a valid email address");
 
-// Both /otp/request and /otp/verify accept either { phone } (channel: "sms",
-// the original behaviour) or { email } (channel: "email" — a fallback for
-// when SMS delivery isn't set up/working, e.g. no DLT-registered SMS sender
-// yet). Exactly one of the two must be provided.
 const resolveOtpIdentifier = (body) => {
   if (body.email) {
     return { identifier: otpEmailSchema.parse(body.email), channel: "email" };
@@ -452,9 +413,7 @@ export const verifyOtpAndLogin = asyncHandler(async (req, res) => {
   await issueTokensAndRespond(res, user);
 });
 
-// POST /api/auth/phone/request-otp  (protected — binds a phone number to an
-// already-logged-in account, e.g. a member who signed up with Google and
-// doesn't have a phone number on file yet).
+// POST /api/auth/phone/request-otp
 export const requestPhoneBindOtp = asyncHandler(async (req, res) => {
   const phone = phoneSchema.parse(req.body.phone);
 
@@ -468,7 +427,7 @@ export const requestPhoneBindOtp = asyncHandler(async (req, res) => {
   ok(res, {}, "OTP sent to your phone. It will expire in a few minutes.");
 });
 
-// POST /api/auth/phone/verify-otp  (protected)
+// POST /api/auth/phone/verify-otp
 export const verifyPhoneBindOtp = asyncHandler(async (req, res) => {
   const phone = phoneSchema.parse(req.body.phone);
   const code = String(req.body.code || "").trim();
@@ -494,13 +453,6 @@ export const verifyPhoneBindOtp = asyncHandler(async (req, res) => {
 });
 
 // POST /api/auth/google
-// Accepts the Google OAuth access token obtained on the frontend via
-// @react-oauth/google's useGoogleLogin(), and verifies it server-side by
-// asking Google's own userinfo endpoint who it belongs to — the frontend
-// can't be trusted to self-report an email/name, so we never accept those
-// fields directly from the client. This also means the member's name,
-// email, and (verified) email status come straight from Google's own
-// records at signup, and are stored once — they are never asked for again.
 export const googleLogin = asyncHandler(async (req, res) => {
   const { token } = req.body;
   if (!token) {
@@ -537,8 +489,6 @@ export const googleLogin = asyncHandler(async (req, res) => {
     });
     await Profile.create({ user: user._id });
   } else if (!user.googleId) {
-    // Existing password/OTP account signing in with Google for the first
-    // time — link it instead of creating a duplicate account.
     user.googleId = googleId;
     if (emailVerified) user.isEmailVerified = true;
     await user.save();
@@ -640,19 +590,19 @@ export const forgotPassword = asyncHandler(async (req, res) => {
 
   try {
     await sendPasswordResetEmail(user, resetUrl);
- } catch (err) {
-  console.error("BREVO EMAIL ERROR:");
-  console.error(err);
-  console.error(err.message);
-  console.error(err.response);
+  } catch (err) {
+    console.error("BREVO EMAIL ERROR:");
+    console.error(err);
+    console.error(err.message);
+    console.error(err.response);
 
-  user.passwordResetTokenHash = undefined;
-  user.passwordResetExpires = undefined;
-  await user.save({ validateBeforeSave: false });
+    user.passwordResetTokenHash = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save({ validateBeforeSave: false });
 
-  res.status(500);
-  throw err;
-}
+    res.status(500);
+    throw err;
+  }
 
   ok(res, {}, genericMessage);
 });
@@ -725,29 +675,5 @@ export const confirmEmailVerification = asyncHandler(async (req, res) => {
   user.emailVerificationExpires = undefined;
   await user.save();
 
-  ok(res, {}, "Your email has been verified.");
-});
-
-// POST /api/auth/verification-request  { idCardName }
-// Lets a member submit the name printed on their government ID so the
-// admin/priest team can manually compare it to their account name (and
-// their uploaded photo) before granting the "Verified" badge.
-export const requestVerification = asyncHandler(async (req, res) => {
-  const { idCardName, aadharImage, panImage, selfieImage } = verificationRequestSchema.parse(req.body);
-
-  const user = await User.findById(req.user._id);
-  user.idCardName = idCardName;
-  if (aadharImage) user.aadharImage = aadharImage;
-  if (panImage) user.panImage = panImage;
-  user.selfieImage = selfieImage;
-  user.verificationRequestedAt = new Date();
-  await user.save();
-
-  ok(res, { user: toPublicUser(user) }, "Submitted for verification. Our team will review it shortly.");
-});
-
-// DELETE /api/auth/me
-export const deactivateAccount = asyncHandler(async (req, res) => {
-  await User.findByIdAndUpdate(req.user._id, { $set: { status: "deactivated", refreshTokens: [] } });
-  ok(res, {}, "Your account has been deactivated");
+  ok(res, {}, "Email verified successfully.");
 });

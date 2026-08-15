@@ -77,6 +77,10 @@ const sendSms = async (phone, code) => {
       throw err;
     }
 
+    // Same caveat as the Message Central log above: Brevo accepting the
+    // request is not proof of delivery — check Brevo dashboard -> SMS
+    // Campaigns -> Reports for this number's actual delivery status.
+    console.log(`[OTP][SMS] Accepted by Brevo for delivery to ${phone}`);
     return { delivered: true, logged: false };
   } catch (err) {
     if (err.statusCode) throw err; // already a friendly error constructed above
@@ -128,6 +132,16 @@ export const generateAndSendOtp = async (
     await Otp.deleteMany({ phone: identifier, purpose, consumed: false });
 
     const { verificationId } = await sendPhoneOtp(identifier);
+    // Logged on success too: Message Central accepting the request and
+    // handing back a verificationId only means THEY queued it — it does
+    // NOT guarantee the SMS actually reached the handset. If this line
+    // prints every time but the code still never arrives, check the SMS
+    // logs in the Message Central dashboard (console.messagecentral.com)
+    // for this verificationId/number — common real-world causes at that
+    // point are: trial/sandbox account restricted to pre-verified test
+    // numbers only, the number being on the DND (Do Not Disturb) registry
+    // for promotional routes, or the account being out of SMS credits.
+    console.log(`[OTP][SMS] Accepted by Message Central for delivery — verificationId: ${verificationId}`);
 
     await Otp.create({
       phone: identifier,

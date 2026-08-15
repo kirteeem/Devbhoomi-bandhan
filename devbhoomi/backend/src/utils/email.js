@@ -35,13 +35,23 @@ export const sendEmail = async ({ to, subject, html, text }) => {
     return { delivered: false, logged: true };
   }
 
-  await t.sendMail({
+  // Logged on success too (not just failure): "accepted" here only means
+  // the SMTP relay (Brevo) took the message for delivery — it does NOT
+  // mean it reached the inbox. If OTPs keep "not arriving" even though
+  // this line prints every time, the message is being accepted by Brevo
+  // and then dropped/spam-filtered/bounced somewhere downstream — check
+  // Brevo dashboard -> Transactional -> Email Activity for this exact
+  // recipient/subject to see the real delivery status (delivered, soft
+  // bounce, hard bounce, blocked, spam-complaint, etc.), since that's
+  // information this server is never told about a "successful" SMTP send.
+  const info = await t.sendMail({
     from: process.env.SMTP_FROM || '"Devbhoomi Bandhan" <no-reply@devbhoomibandhan.com>',
     to,
     subject,
     html,
     text,
   });
+  console.log(`[EMAIL] Accepted by SMTP relay for delivery — to: ${to}, messageId: ${info?.messageId || "n/a"}, response: ${info?.response || "n/a"}`);
   return { delivered: true, logged: false };
 };
 
