@@ -262,12 +262,14 @@ export const Signup = () => {
 
   // Google OAuth Login handler
   const handleGoogleLogin = useGoogleLogin({
+    flow: "auth-code",
     onSuccess: async (tokenResponse) => {
       setServerError("");
       try {
-        // Send the access token received from Google to your backend
+        // Send the short-lived auth code to the backend so the server can
+        // exchange it directly with Google and verify the identity server-side.
         const { data } = await api.post("/auth/google", {
-          token: tokenResponse.access_token,
+          code: tokenResponse.code,
         });
         loginWithTokens(data.data.user, data.data.accessToken, data.data.refreshToken);
         navigate("/dashboard");

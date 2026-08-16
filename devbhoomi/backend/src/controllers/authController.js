@@ -444,16 +444,39 @@ export const verifyPhoneBindOtp = asyncHandler(async (req, res) => {
 
 // POST /api/auth/google
 export const googleLogin = asyncHandler(async (req, res) => {
-  const { token } = req.body;
-  if (!token) {
+  const { code, token } = req.body;
+  if (!code && !token) {
     res.status(400);
     throw new Error("Missing Google authentication token");
   }
 
   let googleProfile;
   try {
+    let accessToken = token;
+    if (code) {
+      const tokenParams = new URLSearchParams({
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: "postmessage",
+        grant_type: "authorization_code",
+      });
+
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: tokenParams.toString(),
+      });
+
+      const tokenJson = await tokenRes.json().catch(() => null);
+      if (!tokenRes.ok || !tokenJson?.access_token) {
+        throw new Error("Google token exchange failed");
+      }
+      accessToken = tokenJson.access_token;
+    }
+
     const googleRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!googleRes.ok) throw new Error("Google rejected this token");
     googleProfile = await googleRes.json();

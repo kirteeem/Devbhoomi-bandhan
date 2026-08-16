@@ -22,6 +22,24 @@ services:
         sync: false
       - key: JWT_REFRESH_SECRET
         sync: false
+      # Email/OTP delivery via Brevo.
+      # Use either the SMTP block below or BREVO_API_KEY for the REST API fallback.
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
       # Phone OTP verification on Signup (utils/messageCentral.js) — get
       # these from console.messagecentral.com. Set the values in the Render
       # dashboard, same as the other sync:false vars here.

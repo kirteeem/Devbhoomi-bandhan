@@ -1,8 +1,9 @@
 // Central helper for turning a stored photo path into something <img> can load,
 // and for giving every profile a tasteful placeholder photo when none has been
 // uploaded yet.
+import { resolveApiOrigin } from "./runtimeConfig";
 
-const API_ORIGIN = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
+const API_ORIGIN = resolveApiOrigin();
 
 /** Resolves a stored photo URL string to a fully-qualified backend route. */
 export const resolvePhotoUrl = (url?: string | null) => {

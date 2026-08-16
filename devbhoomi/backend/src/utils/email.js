@@ -86,24 +86,38 @@ export const sendEmail = async ({ to, subject, html, text }) => {
     return { delivered: false, logged: true };
   }
 
-  // Logged on success too (not just failure): "accepted" here only means
-  // the SMTP relay (Brevo) took the message for delivery — it does NOT
-  // mean it reached the inbox. If OTPs keep "not arriving" even though
-  // this line prints every time, the message is being accepted by Brevo
-  // and then dropped/spam-filtered/bounced somewhere downstream — check
-  // Brevo dashboard -> Transactional -> Email Activity for this exact
-  // recipient/subject to see the real delivery status (delivered, soft
-  // bounce, hard bounce, blocked, spam-complaint, etc.), since that's
-  // information this server is never told about a "successful" SMTP send.
-  const info = await t.sendMail({
-    from: process.env.SMTP_FROM || '"Devbhoomi Bandhan" <no-reply@devbhoomibandhan.com>',
-    to,
-    subject,
-    html,
-    text,
-  });
-  console.log(`[EMAIL] Accepted by SMTP relay for delivery — to: ${to}, messageId: ${info?.messageId || "n/a"}, response: ${info?.response || "n/a"}`);
-  return { delivered: true, logged: false };
+  try {
+    // Logged on success too (not just failure): "accepted" here only means
+    // the SMTP relay (Brevo) took the message for delivery — it does NOT
+    // mean it reached the inbox. If OTPs keep "not arriving" even though
+    // this line prints every time, the message is being accepted by Brevo
+    // and then dropped/spam-filtered/bounced somewhere downstream — check
+    // Brevo dashboard -> Transactional -> Email Activity for this exact
+    // recipient/subject to see the real delivery status (delivered, soft
+    // bounce, hard bounce, blocked, spam-complaint, etc.), since that's
+    // information this server is never told about a "successful" SMTP send.
+    const info = await t.sendMail({
+      from: process.env.SMTP_FROM || '"Devbhoomi Bandhan" <no-reply@devbhoomibandhan.com>',
+      to,
+      subject,
+      html,
+      text,
+    });
+    console.log(`[EMAIL] Accepted by SMTP relay for delivery — to: ${to}, messageId: ${info?.messageId || "n/a"}, response: ${info?.response || "n/a"}`);
+    return { delivered: true, logged: false };
+  } catch (err) {
+    const message = err?.message || String(err);
+
+    // Render/free-host SMTP connectivity can be flaky or blocked. If a Brevo
+    // API key is also configured, fall back to HTTPS delivery instead of
+    // failing the user-visible OTP flow on an SMTP transport timeout.
+    if (process.env.BREVO_API_KEY) {
+      console.warn(`[EMAIL][SMTP] Failed (${message}). Falling back to Brevo API for ${to}.`);
+      return sendViaBrevoApi({ to, subject, html, text });
+    }
+
+    throw err;
+  }
 };
 
 export const sendPasswordResetEmail = async (user, resetUrl) =>

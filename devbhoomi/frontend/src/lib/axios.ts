@@ -1,4 +1,5 @@
 import axios from "axios";
+import { resolveApiOrigin } from "./runtimeConfig";
 
 // In local dev, Vite proxies "/api" to localhost:5000 (see vite.config.ts),
 // so a relative "/api" path works fine there.
@@ -7,7 +8,7 @@ import axios from "axios";
 // full backend origin. Set VITE_API_URL in the frontend's Render env vars to
 // the backend's URL, e.g. https://your-backend.onrender.com
 // (same variable used by src/lib/media.ts and ProfilePreview.tsx for photo URLs)
-const API_ORIGIN = import.meta.env.VITE_API_URL || "";
+const API_ORIGIN = resolveApiOrigin();
 export const API_BASE_URL = `${API_ORIGIN}/api`;
 
 export const api = axios.create({
