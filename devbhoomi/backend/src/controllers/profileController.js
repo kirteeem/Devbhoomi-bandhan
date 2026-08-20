@@ -8,6 +8,7 @@ import { asyncHandler } from "../middleware/asyncHandler.js";
 import { ok } from "../utils/apiResponse.js";
 import { sendIdVerificationEmail } from "../utils/email.js";
 import { isBlockedEitherWay } from "../utils/blockList.js";
+import { ensureProfileForUser } from "../utils/ensureProfile.js";
 import { computeCompletion, recalculateAndPersistCompletion } from "../utils/profileCompletion.js";
 
 // Mirrors the wizard's editable fields. Anything not listed here is stripped,
@@ -114,6 +115,7 @@ const stripEmptyStrings = (value) => {
 
 // GET /api/profiles/me
 export const getMyProfile = asyncHandler(async (req, res) => {
+  await ensureProfileForUser(req.user._id);
   const profile = await Profile.findOne({ user: req.user._id })
     .populate("user", "fullName gender role profileCompletion profileCode phone")
     .lean();
@@ -260,7 +262,14 @@ export const unlockContactDetails = asyncHandler(async (req, res) => {
 
 // GET /api/profiles/:userId
 export const getProfileByUserId = asyncHandler(async (req, res) => {
-  const profile = await Profile.findOne({ user: req.params.userId })
+  const targetUser = await User.findById(req.params.userId).select("_id");
+  if (!targetUser) {
+    res.status(404);
+    throw new Error("Profile not found");
+  }
+
+  await ensureProfileForUser(targetUser._id);
+  const profile = await Profile.findOne({ user: targetUser._id })
     .populate("user", "fullName gender isProfileVerified lastActiveAt profileCode")
     .lean();
   if (!profile || profile.visibility === "hidden") {

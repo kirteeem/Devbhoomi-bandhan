@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { api } from "../lib/axios";
 import { unlockProfile } from "../lib/profileApi";
-import { getDisplayPhoto, buildDefaultAvatar } from "../lib/media";
+import { getProfileDisplayPhoto, buildDefaultAvatar } from "../lib/media";
 import { AboutSection } from "../components/profile/AboutSection";
 import { ProfileGallery } from "../components/profile/ProfileGallery";
 import { UnlockProfileModal } from "../components/profile/UnlockProfileModal";
@@ -107,11 +107,7 @@ export const ProfilePreview = () => {
   // just visually, so this flag drives which sections even attempt to render.
   const showFull = isOwnProfile || detailsUnlocked;
 
-  const profilePhoto =
-    (profile as any).photos?.find((photo: any) => photo.isProfilePhoto) ||
-    (profile as any).photos?.[0];
-
-  const userMainImage = getDisplayPhoto(profilePhoto?.url, (profile as any).user?.gender, profile.user?._id);
+  const userMainImage = getProfileDisplayPhoto(profile.photos, (profile as any).user?.gender, profile.user?._id);
   const userCombinedName =
     (profile as any).user?.fullName ||
     (profile as any).fullName ||

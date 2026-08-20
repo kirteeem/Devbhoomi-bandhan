@@ -94,6 +94,8 @@ const profileSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+profileSchema.index({ user: 1 }, { unique: true });
+
 profileSchema.index({ district: 1, "education.degree": 1 });
 // Every browse/dashboard/suggestion query starts with
 // { visibility: { $ne: "hidden" } } and sorts by createdAt/updatedAt —

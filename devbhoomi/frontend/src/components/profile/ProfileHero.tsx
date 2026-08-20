@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { MapPin, Briefcase, Sparkles, Lock } from "lucide-react";
 import type { Profile } from "../../types";
-import { getDisplayPhoto, resolvePhotoUrl } from "../../lib/media";
+import { getProfileDisplayPhoto, resolvePhotoUrl } from "../../lib/media";
 import { VerifiedBadge } from "../ui/VerifiedBadge";
 
 interface Props {
@@ -17,7 +17,7 @@ export const ProfileHero = ({ profile, isOwnProfile, onRequestKundali, kundaliSt
     : null;
   const coverPhoto = profile.photos?.find((p) => p.isProfilePhoto) ?? profile.photos?.[0];
   const cover = resolvePhotoUrl(coverPhoto?.url);
-  const fallbackPhotoUrl = getDisplayPhoto(coverPhoto?.url, profile.user?.gender, profile.user?._id);
+  const fallbackPhotoUrl = getProfileDisplayPhoto(profile.photos, profile.user?.gender, profile.user?._id);
   const isBlurred = !!coverPhoto?.blurred;
 
   return (

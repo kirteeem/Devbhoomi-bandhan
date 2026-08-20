@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { MapPin, Lock, Crown } from "lucide-react";
 import type { Profile } from "../../types";
-import { resolvePhotoUrl, getDisplayPhoto } from "../../lib/media";
+import { getProfileDisplayPhoto, resolvePhotoUrl } from "../../lib/media";
 import { useProfileGate } from "../../context/ProfileGateContext";
 import { ReportBlockMenu } from "../profile/ReportBlockMenu";
 import { VerifiedBadge } from "./VerifiedBadge";
@@ -26,15 +26,9 @@ export const ProfileCard = ({ profile }: { profile: Profile }) => {
     setPhotoFailed(false);
   }, [uploadedPhotoUrl]);
 
-  // Gender-aware avatar fallback
-  const getAvatarUrl = () => {
-    if (uploadedPhotoUrl && !photoFailed) {
-      return uploadedPhotoUrl;
-    }
-    return getDisplayPhoto(null, profile.user?.gender, profile.user?._id);
-  };
-
-  const finalPhotoUrl = getAvatarUrl();
+  const finalPhotoUrl = uploadedPhotoUrl && !photoFailed
+    ? uploadedPhotoUrl
+    : getProfileDisplayPhoto(profile.photos, profile.user?.gender, profile.user?._id);
 
   if (hidden) return null;
 

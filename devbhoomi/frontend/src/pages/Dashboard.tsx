@@ -367,7 +367,7 @@ export const Dashboard = () => {
                     const initialAvatarUrl = resolvedSuggestPhoto || fallbackSuggestAvatar;
 
                     return (
-                      <div key={p._id} className="group overflow-hidden rounded-[20px] border border-[#ECE8E2] bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md">
+                      <div key={p.user._id} className="group overflow-hidden rounded-[20px] border border-[#ECE8E2] bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md">
                         <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-neutral-50">
                           <img
                             src={initialAvatarUrl}

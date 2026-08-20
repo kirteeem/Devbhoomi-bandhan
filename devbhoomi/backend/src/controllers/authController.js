@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { z } from "zod";
 import User from "../models/User.js";
 import Profile from "../models/Profile.js";
+import { ensureProfileForUser } from "../utils/ensureProfile.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { generateAccessToken, generateRefreshToken } from "../utils/generateTokens.js";
 import { generateAndSendOtp, verifyOtp } from "../utils/otp.js";
@@ -290,7 +291,7 @@ export const signup = asyncHandler(async (req, res) => {
     isPhoneVerified: true,
   });
 
-  await Profile.create({ user: user._id });
+  await ensureProfileForUser(user._id);
   return await issueTokensAndRespond(res, user, 201);
 });
 
@@ -391,7 +392,7 @@ export const verifyOtpAndLogin = asyncHandler(async (req, res) => {
       authProvider: "otp",
       ...(channel === "email" ? { isEmailVerified: true } : { isPhoneVerified: true }),
     });
-    await Profile.create({ user: user._id });
+    await ensureProfileForUser(user._id);
   } else if (channel === "email" && !user.isEmailVerified) {
     user.isEmailVerified = true;
     await user.save({ validateBeforeSave: false });
@@ -500,7 +501,7 @@ export const googleLogin = asyncHandler(async (req, res) => {
       authProvider: "google",
       isEmailVerified: Boolean(emailVerified),
     });
-    await Profile.create({ user: user._id });
+    await ensureProfileForUser(user._id);
   } else if (!user.googleId) {
     user.googleId = googleId;
     if (emailVerified) user.isEmailVerified = true;

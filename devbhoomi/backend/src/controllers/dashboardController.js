@@ -4,6 +4,7 @@ import ProfileView from "../models/ProfileView.js";
 import Subscription from "../models/Subscription.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { ok } from "../utils/apiResponse.js";
+import { ensureProfileForUser } from "../utils/ensureProfile.js";
 
 // Same free-tier rule used by the Browse Matches grid (see matchController.js
 // FREE_BROWSE_LIMIT) — kept as its own constant here so the dashboard never
@@ -53,6 +54,7 @@ export const getDashboardSummary = asyncHandler(async (req, res) => {
   const user = req.user;
   const viewerIsPremium = user.isPremium();
 
+  await ensureProfileForUser(user._id);
   const myProfile = await Profile.findOne({ user: user._id }).lean();
 
   const oppositeGender = user.gender === "male" ? "female" : user.gender === "female" ? "male" : undefined;

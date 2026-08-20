@@ -459,7 +459,7 @@ export const Matches = () => {
               <>
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
                   {profiles.map((profile) => (
-                    <ProfileCard key={profile._id} profile={profile} />
+                    <ProfileCard key={profile.user._id} profile={profile} />
                   ))}
                 </div>
 

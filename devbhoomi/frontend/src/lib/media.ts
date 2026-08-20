@@ -112,3 +112,17 @@ export const getDisplayPhoto = (
   if (real) return real;
   return buildDefaultAvatar(gender, seed);
 };
+
+/**
+ * Canonical photo picker for profile cards and profile pages.
+ * Uses only the profile's own photos array, then falls back to a
+ * gender-specific placeholder if no photo exists.
+ */
+export const getProfileDisplayPhoto = (
+  photos?: { url?: string | null; isProfilePhoto?: boolean }[] | null,
+  gender?: string | null,
+  seed?: string | null,
+) => {
+  const primaryPhoto = photos?.find((p) => p.isProfilePhoto) ?? photos?.[0];
+  return getDisplayPhoto(primaryPhoto?.url, gender, seed);
+};
